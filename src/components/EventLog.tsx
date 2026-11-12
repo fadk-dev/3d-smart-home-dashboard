@@ -1,21 +1,21 @@
-// Event / activity log — SRS §5.1, UI-10, FR-20, AC-17.
-// Perintah, state update, connect/disconnect/reconnect, error validasi.
-// Kredensial TIDAK PERNAH ditulis ke log (§11).
-import { useSmartHome } from '../store/useStore';
+// Event / activity log — SRS §7, FR-07, NFR-06.
+// Alert, koneksi/reconnect, error validasi, perubahan threshold/perangkat,
+// ringkasan telemetri (di-throttle). Kredensial TIDAK PERNAH ditulis ke log.
+import { useIiotStore } from '../store/useStore';
 
 const KIND_LABEL: Record<string, string> = {
-  command: 'PERINTAH',
-  state: 'STATE',
   telemetry: 'TELEMETRI',
   connection: 'KONEKSI',
-  availability: 'PERANGKAT',
+  alert: 'ALERT',
   validation: 'VALIDASI',
   mode: 'MODE',
+  device: 'PERANGKAT',
   info: 'INFO',
+  threshold: 'THRESHOLD',
 };
 
 export default function EventLog() {
-  const events = useSmartHome((s) => s.events);
+  const events = useIiotStore((s) => s.events);
   return (
     <section className="panel" aria-label="Log aktivitas">
       <h2>Log Aktivitas</h2>

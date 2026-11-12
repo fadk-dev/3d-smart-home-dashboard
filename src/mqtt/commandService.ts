@@ -1,103 +1,114 @@
-// Command Manager — SRS §4.3, FR-06/07/08/10, AC-03/04/05/07, NFR-02/04/05.
-// Satu-satunya jalur pengiriman perintah lampu, dipakai panel 2D maupun klik
-// objek 3D. Aturan:
-//  - Mode SIMULATION: TIDAK PERNAH publish ke broker live (FR-19); perintah
-//    dijawab oleh simulasi dengan requestId yang sama.
-//  - Mode LIVE: publish QoS 1, retain false; pending ditampilkan ≤100 ms
-//    (langsung, sinkron di store); timeout default 3000 ms (NFR-04).
-//  - Confirmed state HANYA berasal dari pesan state (NFR-05) — publish yang
-//    sukses bukan bukti aktuator berubah.
-import { deviceById } from '../config/devices';
-import type { LampState } from '../config';
-import { buildLampCommand, validateLampCommand } from '../lib/validate';
-import { effectiveAvailability, useSmartHome } from '../store/useStore';
-import { mqttService } from './client';
-import { simulateLampCommand } from '../sim/simulation';
+// Layanan evaluasi threshold & alert — SRS IIoT Catering v1.1 FR-06/FR-07.
+//
+// CATATAN REPURPOSE: file ini dulu Command Manager (kontrol lampu). MVP IIoT
+// Catering adalah MONITORING-ONLY — tidak ada publish perintah, tidak ada
+// kontrol perangkat, dan file ini tidak lagi menyentuh MQTT sama sekali.
+// Modul ini murni (tanpa efek samping): menerima nilai + threshold, dan
+// mengembalikan pelanggaran yang ditemukan. Dedup alert (satu alert aktif
+// per ruangan+parameter+tipe) dan auto-resolve ditangani store
+// (`src/store/useStore.ts`).
+import type { Parameter, RoomId } from '../config';
+import { PARAMETER_META } from '../config';
+import type { ThresholdSet } from '../config/devices';
 
-export interface CommandResult {
-  ok: boolean;
-  reason?: string;
-  requestId?: string;
+export type AlertType =
+  | 'Humidity High'
+  | 'Humidity Low'
+  | 'Temperature High'
+  | 'Temperature Low'
+  | 'Pressure High'
+  | 'Pressure Low'
+  | 'Device Offline'
+  | 'Invalid Sensor Data';
+
+export interface ThresholdBreach {
+  parameter: Parameter;
+  alertType: AlertType;
+  actualValue: number;
+  thresholdValue: number;
 }
 
-/** Kirim perintah lampu ke target state eksplisit (bukan toggle) — SRS §6.5. */
-export function sendLampCommand(deviceId: string, targetState: LampState): CommandResult {
-  const store = useSmartHome.getState();
-  const device = deviceById(deviceId);
-  if (!device) return { ok: false, reason: `Perangkat tidak dikenal: ${deviceId}` };
+const HIGH_TYPE: Record<Parameter, AlertType> = {
+  humidity: 'Humidity High',
+  temperature: 'Temperature High',
+  pressure: 'Pressure High',
+};
 
-  const dev = store.devices[deviceId];
-  if (!dev) return { ok: false, reason: 'Perangkat tidak dikenal' };
-  if (dev.pending) {
-    return { ok: false, reason: 'Masih ada perintah yang menunggu konfirmasi' };
-  }
-  if (dev.confirmedState === targetState) {
-    return { ok: false, reason: `Lampu sudah ${targetState}` };
-  }
+const LOW_TYPE: Record<Parameter, AlertType> = {
+  humidity: 'Humidity Low',
+  temperature: 'Temperature Low',
+  pressure: 'Pressure Low',
+};
 
-  const availability = effectiveAvailability(dev, Date.now());
-  if (store.mode === 'SIMULATION') {
-    // Jalur simulasi — tidak menyentuh mqttService sama sekali (FR-19).
-    const cmd = buildLampCommand(deviceId, targetState);
-    const v = validateLampCommand(cmd);
-    if (!v.ok) return { ok: false, reason: v.error };
-    store.startPending(deviceId, {
-      requestId: cmd.requestId,
-      targetState,
-      issuedAt: cmd.issuedAt,
-    });
-    store.addEvent(
-      'command',
-      `[SIM] ${device.roomName}: perintah ${targetState} (${cmd.requestId})`,
-    );
-    simulateLampCommand(device, cmd);
-    scheduleTimeout(deviceId, cmd.requestId, store.commandTimeoutMs);
-    return { ok: true, requestId: cmd.requestId };
-  }
-
-  // Mode LIVE
-  if (store.brokerStatus !== 'CONNECTED') {
-    return { ok: false, reason: 'Broker belum terhubung' };
-  }
-  if (availability !== 'ONLINE') {
+/**
+ * Evaluasi satu parameter terhadap rentang min/max.
+ * Mengembalikan pelanggaran (atau null bila nilai dalam rentang / tidak ada).
+ */
+export function evaluateParameter(
+  parameter: Parameter,
+  value: number | null,
+  range: { min: number; max: number } | undefined,
+): ThresholdBreach | null {
+  if (value === null || value === undefined || range === undefined) return null;
+  if (value > range.max) {
     return {
-      ok: false,
-      reason: `Perangkat ${availability.toLowerCase()} — kontrol dinonaktifkan`,
+      parameter,
+      alertType: HIGH_TYPE[parameter],
+      actualValue: value,
+      thresholdValue: range.max,
     };
   }
-  const cmd = buildLampCommand(deviceId, targetState);
-  const v = validateLampCommand(cmd);
-  if (!v.ok) return { ok: false, reason: v.error };
-  // Pending langsung ditulis ke store (feedback ≤100 ms, NFR-02).
-  store.startPending(deviceId, {
-    requestId: cmd.requestId,
-    targetState,
-    issuedAt: cmd.issuedAt,
-  });
-  store.addEvent(
-    'command',
-    `${device.roomName}: perintah ${targetState} (${cmd.requestId})`,
-  );
-  const published = mqttService.publishCommand(deviceId, cmd);
-  if (!published) {
-    // Publish gagal di transport — batalkan pending, jangan klaim terkirim.
-    store.markCommandTimeout(deviceId, cmd.requestId);
-    return { ok: false, reason: 'Gagal mengirim perintah ke broker' };
+  if (value < range.min) {
+    return {
+      parameter,
+      alertType: LOW_TYPE[parameter],
+      actualValue: value,
+      thresholdValue: range.min,
+    };
   }
-  scheduleTimeout(deviceId, cmd.requestId, store.commandTimeoutMs);
-  return { ok: true, requestId: cmd.requestId };
+  return null;
 }
 
-/** Toggle lampu: target = kebalikan confirmed state (atau ON bila belum diketahui). */
-export function toggleLamp(deviceId: string): CommandResult {
-  const dev = useSmartHome.getState().devices[deviceId];
-  if (!dev) return { ok: false, reason: 'Perangkat tidak dikenal' };
-  const target: LampState = dev.confirmedState === 'ON' ? 'OFF' : 'ON';
-  return sendLampCommand(deviceId, target);
+export interface ReadingValues {
+  humidity: number | null;
+  temperature: number | null;
+  pressure: number | null;
 }
 
-function scheduleTimeout(deviceId: string, requestId: string, timeoutMs: number): void {
-  setTimeout(() => {
-    useSmartHome.getState().markCommandTimeout(deviceId, requestId);
-  }, timeoutMs);
+/**
+ * Evaluasi satu bacaan lengkap terhadap threshold ruangan.
+ * Mengembalikan daftar pelanggaran (maks. 1 per parameter).
+ */
+export function evaluateReading(
+  values: ReadingValues,
+  thresholds: ThresholdSet,
+): ThresholdBreach[] {
+  const out: ThresholdBreach[] = [];
+  const params: Parameter[] = ['humidity', 'temperature', 'pressure'];
+  for (const p of params) {
+    const b = evaluateParameter(p, values[p], thresholds[p]);
+    if (b) out.push(b);
+  }
+  return out;
+}
+
+/** Kunci dedup alert: satu alert aktif per (ruangan, parameter, tipe). */
+export function alertKey(roomId: RoomId, parameter: Parameter, alertType: AlertType): string {
+  return `${roomId}|${parameter}|${alertType}`;
+}
+
+/** Kunci dedup alert Device Offline: satu alert aktif per perangkat. */
+export function offlineAlertKey(deviceId: string): string {
+  return `${deviceId}|device|Device Offline`;
+}
+
+/** Kunci dedup alert Invalid Sensor Data: satu alert aktif per perangkat. */
+export function invalidAlertKey(deviceId: string): string {
+  return `${deviceId}|device|Invalid Sensor Data`;
+}
+
+/** Label parameter untuk UI alert (termasuk 'device' untuk alert perangkat). */
+export function alertParameterLabel(parameter: Parameter | 'device'): string {
+  if (parameter === 'device') return 'Perangkat';
+  return PARAMETER_META[parameter].label;
 }

@@ -1,22 +1,42 @@
-// Konfigurasi aplikasi — SRS §3, §6.2, §9.1, NFR-04.
-// Semua identitas ruangan/perangkat, topik, dan default koneksi terpusat di sini
-// agar penambahan perangkat (NFR-11) tidak mengubah konsep state dasar.
+// Konfigurasi aplikasi — SRS IIoT Catering v1.1 (MVP).
+// Monitoring-only: tidak ada kontrol perangkat, tidak ada publish perintah.
+// Semua identitas ruangan/node, topik, dan konstanta waktu terpusat di sini.
 
-export const SCHEMA_VERSION = '1.0';
+/** Interval sampling baseline SRS §3.3 / NFR-01: 1 menit. */
+export const SAMPLING_INTERVAL_MS = 60_000;
 
-/** Batas freshness telemetri (SRS §9.5): CURRENT ≤5 dtk, STALE >5–10 dtk, UNAVAILABLE >10 dtk. */
-export const FRESHNESS_CURRENT_MS = 5_000;
-export const FRESHNESS_STALE_MS = 10_000;
+/** Tick simulasi dipercepat: 1 bacaan tiap 5 detik (bukan 1 menit) — lihat README. */
+export const SIM_TICK_MS = 5_000;
 
-/** Buffer histori telemetri (SRS §9.1): 60 titik, interval baseline 2 dtk. */
-export const HISTORY_CAPACITY = 60;
-export const TELEMETRY_INTERVAL_MS = 2_000;
+/** Timeout offline = 3× interval sampling (NFR-02, AC-10). */
+export const OFFLINE_TIMEOUT_LIVE_MS = 3 * SAMPLING_INTERVAL_MS; // 180 dtk
+/** Timeout offline dalam simulasi dipercepat (30 dtk tanpa bacaan). */
+export const OFFLINE_TIMEOUT_SIM_MS = 30_000;
 
-/** Timeout perintah default (NFR-04): 3000 ms, dapat diubah lewat panel pengaturan. */
-export const DEFAULT_COMMAND_TIMEOUT_MS = 3_000;
+/**
+ * Freshness bacaan terakhir, relatif terhadap interval sampling 1 menit:
+ * CURRENT ≤ 90 dtk, STALE 90–180 dtk, UNAVAILABLE > 180 dtk.
+ */
+export const FRESHNESS_CURRENT_MS = 90_000;
+export const FRESHNESS_STALE_MS = 180_000;
 
-/** Jendela kewajaran timestamp: tidak lebih dari 5 menit di masa depan. */
+/** Jendela kewajaran timestamp: tidak lebih dari 5 menit di masa depan (FR-02). */
 export const TIMESTAMP_FUTURE_TOLERANCE_MS = 5 * 60_000;
+
+/** Kapasitas histori di memori per ruangan (titik). */
+export const HISTORY_CAPACITY = 240;
+
+/** Kapasitas bacaan tersimpan di IndexedDB (bacaan terbaru dipertahankan). */
+export const READINGS_DB_CAP = 10_000;
+
+/** Seed histori sintetis saat pertama load (menit, interval 1 menit). */
+export const SEED_HISTORY_MINUTES = 120;
+
+/** Throttle log ringkasan telemetri per perangkat (ms). */
+export const TELEMETRY_LOG_THROTTLE_MS = 300_000;
+
+/** Throttle entri Invalid Sensor Data per perangkat (ms): maks 1 per menit. */
+export const INVALID_LOG_THROTTLE_MS = 60_000;
 
 /** Broker publik untuk pengujian (placeholder — bukan kredensial, tanpa auth). */
 export const DEFAULT_BROKER_URL =
@@ -25,34 +45,29 @@ export const DEFAULT_BROKER_URL =
 export const DEFAULT_MQTT_USERNAME = import.meta.env.VITE_MQTT_USERNAME ?? '';
 export const DEFAULT_MQTT_PASSWORD = import.meta.env.VITE_MQTT_PASSWORD ?? '';
 
-export type LampState = 'ON' | 'OFF';
 export type AppMode = 'LIVE' | 'SIMULATION';
 export type BrokerStatus = 'CONNECTING' | 'CONNECTED' | 'DISCONNECTED' | 'ERROR';
-export type Availability = 'ONLINE' | 'OFFLINE' | 'UNKNOWN' | 'STALE';
+export type DeviceStatus = 'ONLINE' | 'OFFLINE' | 'DISABLED' | 'STALE';
 export type Freshness = 'CURRENT' | 'STALE' | 'UNAVAILABLE';
+export type Parameter = 'humidity' | 'temperature' | 'pressure';
+export type UserRole = 'ADMIN' | 'OPERATOR';
+export type RoomId = 'R01' | 'R02' | 'R03' | 'R04' | 'R05' | 'R06' | 'R07' | 'R08';
+export type AlertStatus = 'Active' | 'Acknowledged' | 'Resolved';
 
-export interface DeviceConfig {
-  roomId: string;
-  deviceId: string;
-  roomName: string;
-  /** true bila perangkat ini membawa sensor telemetri (hanya perangkat kanonis). */
-  hasTelemetry: boolean;
-}
+export const PARAMETER_META: Record<Parameter, { label: string; unit: string }> = {
+  humidity: { label: 'Kelembapan', unit: '%RH' },
+  temperature: { label: 'Suhu', unit: '°C' },
+  pressure: { label: 'Tekanan Diferensial', unit: 'Pa' },
+};
 
-export function telemetryTopic(d: DeviceConfig): string {
-  return `smarthome/${d.roomId}/${d.deviceId}/telemetry`;
-}
-export function availabilityTopic(d: DeviceConfig): string {
-  return `smarthome/${d.roomId}/${d.deviceId}/availability`;
-}
-export function lampCommandTopic(d: DeviceConfig): string {
-  return `smarthome/${d.roomId}/${d.deviceId}/lamp/command`;
-}
-export function lampStateTopic(d: DeviceConfig): string {
-  return `smarthome/${d.roomId}/${d.deviceId}/lamp/state`;
+export const PARAMETER_ORDER: Parameter[] = ['humidity', 'temperature', 'pressure'];
+
+/** Timeout offline sesuai mode aktif. */
+export function offlineTimeoutMs(mode: AppMode): number {
+  return mode === 'SIMULATION' ? OFFLINE_TIMEOUT_SIM_MS : OFFLINE_TIMEOUT_LIVE_MS;
 }
 
-/** Semua topik yang harus di-subscribe untuk satu perangkat (SRS §6.8). */
-export function subscribeTopics(d: DeviceConfig): string[] {
-  return [telemetryTopic(d), availabilityTopic(d), lampStateTopic(d)];
+/** Label mode untuk UI. */
+export function modeLabel(mode: AppMode): string {
+  return mode === 'LIVE' ? 'LIVE' : 'SIMULATION';
 }

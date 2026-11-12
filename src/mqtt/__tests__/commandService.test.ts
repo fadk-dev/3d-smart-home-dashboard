@@ -1,22 +1,33 @@
-// Unit test Command Manager — FR-19/AC-14 (simulasi tidak pernah publish),
-// FR-08/10 (pending → confirmed / timeout), mode LIVE tanpa broker ditolak.
+// Unit test layanan evaluasi threshold & alert — FR-06/FR-07.
+// Modul ini dulu Command Manager; MVP monitoring-only: TIDAK ADA publish.
+// Test di sini membuktikan: (1) evaluasi threshold murni benar, (2) klien MQTT
+// tidak punya method publish sama sekali, (3) simulasi tidak pernah menyentuh
+// broker.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEVICES } from '../../config/devices';
-import { useSmartHome } from '../../store/useStore';
+import { DEFAULT_THRESHOLDS, NODES } from '../../config/devices';
+import { useIiotStore } from '../../store/useStore';
 import type { DeviceRuntime } from '../../store/useStore';
-import { sendLampCommand } from '../../mqtt/commandService';
+import {
+  alertKey,
+  evaluateParameter,
+  evaluateReading,
+} from '../../mqtt/commandService';
 import { mqttService } from '../../mqtt/client';
+import { startSimulation, stopSimulation } from '../../sim/simulation';
 
 function freshDevices(): Record<string, DeviceRuntime> {
   const out: Record<string, DeviceRuntime> = {};
-  for (const config of DEVICES) {
+  for (const config of NODES) {
     out[config.deviceId] = {
       config,
-      availability: 'UNKNOWN',
-      availabilityReceivedAt: null,
-      confirmedState: null,
-      pending: null,
-      lastOutcome: null,
+      enabled: true,
+      status: 'OFFLINE',
+      lastSeen: null,
+      lastTs: undefined,
+      lastReading: null,
+      lastInvalidAt: null,
+      invalidCount: 0,
+      lastTelemetryLogAt: null,
     };
   }
   return out;
@@ -24,95 +35,126 @@ function freshDevices(): Record<string, DeviceRuntime> {
 
 beforeEach(() => {
   vi.useFakeTimers();
-  useSmartHome.setState({
+  useIiotStore.setState({
     mode: 'SIMULATION',
     brokerStatus: 'DISCONNECTED',
-    commandTimeoutMs: 3000,
     devices: freshDevices(),
-    telemetry: null,
-    history: [],
+    alerts: [],
     events: [],
   });
-  useSmartHome.getState().markAllDevicesOnline();
-  // State awal OFF agar perintah ON bermakna.
-  useSmartHome.getState().applyLampState(
-    { schemaVersion: '1.0', deviceId: 'esp32_01', state: 'OFF', ts: Date.now(), seq: 0 },
-    Date.now(),
-  );
 });
 
 afterEach(() => {
+  stopSimulation();
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
-describe('mode SIMULATION', () => {
-  it('tidak pernah memanggil publish MQTT (FR-19) — nol publish call', () => {
-    const publishSpy = vi.spyOn(mqttService, 'publishCommand');
-    const res = sendLampCommand('esp32_01', 'ON');
-    expect(res.ok).toBe(true);
-    expect(res.requestId).toMatch(/^req-/);
-    expect(publishSpy).not.toHaveBeenCalled();
-    // Pending langsung terlihat (NFR-02).
-    expect(useSmartHome.getState().devices['esp32_01'].pending?.targetState).toBe('ON');
-    // Echo simulasi (300–800 ms) menyelesaikan pending dengan requestId sama.
-    vi.advanceTimersByTime(1000);
-    const dev = useSmartHome.getState().devices['esp32_01'];
-    expect(dev.confirmedState).toBe('ON');
-    expect(dev.pending).toBeNull();
+describe('evaluateParameter — per parameter', () => {
+  it('normal di dalam rentang → null', () => {
+    expect(evaluateParameter('temperature', 24, { min: 18, max: 26 })).toBeNull();
+    expect(evaluateParameter('humidity', 60, { min: 40, max: 65 })).toBeNull();
+    expect(evaluateParameter('pressure', 8, { min: 2.5, max: 15 })).toBeNull();
   });
 
-  it('perintah kedua saat pending ditolak', () => {
-    sendLampCommand('esp32_01', 'ON');
-    const res = sendLampCommand('esp32_01', 'OFF');
-    expect(res.ok).toBe(false);
-    expect(res.reason).toContain('menunggu konfirmasi');
+  it('di atas max → High dengan thresholdValue = max', () => {
+    const b = evaluateParameter('temperature', 30, { min: 18, max: 26 });
+    expect(b?.alertType).toBe('Temperature High');
+    expect(b?.thresholdValue).toBe(26);
+    expect(b?.actualValue).toBe(30);
   });
 
-  it('perintah ke target yang sama dengan confirmed ditolak', () => {
-    const res = sendLampCommand('esp32_01', 'OFF'); // sudah OFF
-    expect(res.ok).toBe(false);
+  it('di bawah min → Low dengan thresholdValue = min', () => {
+    const b = evaluateParameter('humidity', 30, { min: 40, max: 65 });
+    expect(b?.alertType).toBe('Humidity Low');
+    expect(b?.thresholdValue).toBe(40);
+  });
+
+  it('tekanan diferensial (ΔP) dievaluasi sama', () => {
+    expect(evaluateParameter('pressure', 1, { min: 2.5, max: 15 })?.alertType).toBe('Pressure Low');
+    expect(evaluateParameter('pressure', 20, { min: 2.5, max: 15 })?.alertType).toBe('Pressure High');
+  });
+
+  it('nilai null / tanpa threshold → null (tidak ada alert palsu)', () => {
+    expect(evaluateParameter('pressure', null, { min: 2.5, max: 15 })).toBeNull();
+    expect(evaluateParameter('temperature', 24, undefined)).toBeNull();
+  });
+
+  it('tepat di batas min/max masih normal', () => {
+    expect(evaluateParameter('temperature', 18, { min: 18, max: 26 })).toBeNull();
+    expect(evaluateParameter('temperature', 26, { min: 18, max: 26 })).toBeNull();
   });
 });
 
-describe('mode LIVE tanpa broker', () => {
-  it('menolak perintah bila broker belum terhubung', () => {
-    useSmartHome.setState({ mode: 'LIVE', brokerStatus: 'DISCONNECTED' });
-    const publishSpy = vi.spyOn(mqttService, 'publishCommand');
-    const res = sendLampCommand('esp32_01', 'ON');
-    expect(res.ok).toBe(false);
-    expect(res.reason).toContain('Broker belum terhubung');
-    expect(publishSpy).not.toHaveBeenCalled();
+describe('evaluateReading — satu bacaan lengkap', () => {
+  it('R06 normal → tanpa pelanggaran', () => {
+    expect(
+      evaluateReading(
+        { humidity: 60, temperature: 23, pressure: 8 },
+        DEFAULT_THRESHOLDS.R06,
+      ),
+    ).toEqual([]);
   });
 
-  it('menolak perintah bila perangkat offline walau broker terhubung', () => {
-    useSmartHome.setState({ mode: 'LIVE', brokerStatus: 'CONNECTED' });
-    useSmartHome.getState().applyAvailability(
-      { schemaVersion: '1.0', deviceId: 'esp32_01', status: 'offline', ts: Date.now() },
-      Date.now(),
+  it('R06 ΔP di bawah 2.5 Pa → Pressure Low', () => {
+    const out = evaluateReading(
+      { humidity: 60, temperature: 23, pressure: 1.0 },
+      DEFAULT_THRESHOLDS.R06,
     );
-    const res = sendLampCommand('esp32_01', 'ON');
-    expect(res.ok).toBe(false);
-    expect(res.reason).toContain('offline');
+    expect(out).toHaveLength(1);
+    expect(out[0].alertType).toBe('Pressure Low');
+  });
+
+  it('beberapa parameter sekaligus → beberapa pelanggaran', () => {
+    const out = evaluateReading(
+      { humidity: 90, temperature: 30, pressure: null },
+      DEFAULT_THRESHOLDS.R06,
+    );
+    expect(out.map((b) => b.alertType).sort()).toEqual([
+      'Humidity High',
+      'Temperature High',
+    ]);
+  });
+
+  it('R03 dingin (−18 °C) normal; −25 °C → Temperature Low', () => {
+    expect(
+      evaluateReading({ humidity: 70, temperature: -18, pressure: null }, DEFAULT_THRESHOLDS.R03),
+    ).toEqual([]);
+    const out = evaluateReading(
+      { humidity: 70, temperature: -25, pressure: null },
+      DEFAULT_THRESHOLDS.R03,
+    );
+    expect(out[0].alertType).toBe('Temperature Low');
+    expect(out[0].thresholdValue).toBe(-22);
   });
 });
 
-describe('timeout (NFR-04)', () => {
-  it('pending yang tidak dikonfirmasi menjadi TIMEOUT setelah 3000 ms', () => {
-    // Matikan echo simulasi dengan menahan timer: kirim perintah lalu majukan
-    // hanya timer timeout — echo sim (≤800 ms) ikut termajukan, jadi gunakan
-    // perangkat lampu lain tanpa state awal? Lebih langsung: uji store-level
-    // lewat commandService dengan mode LIVE + broker CONNECTED + mock publish
-    // yang tidak pernah membalas state.
-    useSmartHome.setState({ mode: 'LIVE', brokerStatus: 'CONNECTED' });
-    vi.spyOn(mqttService, 'publishCommand').mockReturnValue(true);
-    const res = sendLampCommand('esp32_01', 'ON');
-    expect(res.ok).toBe(true);
-    expect(useSmartHome.getState().devices['esp32_01'].pending).not.toBeNull();
-    vi.advanceTimersByTime(3000);
-    const dev = useSmartHome.getState().devices['esp32_01'];
-    expect(dev.pending).toBeNull();
-    expect(dev.lastOutcome).toBe('TIMEOUT');
-    expect(dev.confirmedState).toBe('OFF'); // state terakhir dipertahankan
+describe('alertKey — dedup', () => {
+  it('kunci sama untuk ruangan+parameter+tipe yang sama', () => {
+    expect(alertKey('R06', 'pressure', 'Pressure High')).toBe(
+      alertKey('R06', 'pressure', 'Pressure High'),
+    );
+    expect(alertKey('R06', 'pressure', 'Pressure High')).not.toBe(
+      alertKey('R06', 'pressure', 'Pressure Low'),
+    );
+    expect(alertKey('R06', 'pressure', 'Pressure High')).not.toBe(
+      alertKey('R05', 'pressure', 'Pressure High'),
+    );
+  });
+});
+
+describe('monitoring-only — TIDAK ADA publish', () => {
+  it('mqttService tidak memiliki method publish sama sekali', () => {
+    const svc = mqttService as unknown as Record<string, unknown>;
+    expect(svc.publish).toBeUndefined();
+    expect(svc.publishCommand).toBeUndefined();
+  });
+
+  it('simulasi tidak pernah memanggil connect broker (nol panggilan)', () => {
+    const connectSpy = vi.spyOn(mqttService, 'connect');
+    startSimulation();
+    vi.advanceTimersByTime(30_000);
+    expect(connectSpy).not.toHaveBeenCalled();
+    expect(useIiotStore.getState().brokerStatus).toBe('DISCONNECTED');
   });
 });

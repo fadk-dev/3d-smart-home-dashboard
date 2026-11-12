@@ -1,35 +1,32 @@
-// Panel koneksi & pengaturan — SRS §5.1, §10, NFR-04/12/14.
+// Panel koneksi & pengaturan — SRS §6, FR-02, NFR-01/02.
 // Mode LIVE/SIMULATION, URL broker WebSocket, kredensial opsional (hanya
-// localStorage — tidak pernah masuk source code), timeout perintah.
-// Berpindah ke SIMULATION memutuskan koneksi live; terputus di LIVE tetap
-// LIVE dengan badge DISCONNECTED (AC-10) — tidak pernah diam-diam fallback
-// ke simulasi.
+// localStorage — tidak pernah masuk source code), tampilan interval sampling
+// & timeout offline. Berpindah ke SIMULATION memutuskan koneksi live; terputus
+// di LIVE tetap LIVE dengan badge DISCONNECTED (AC-10) — tidak pernah
+// diam-diam fallback ke simulasi.
 import { useState } from 'react';
-import { DEFAULT_COMMAND_TIMEOUT_MS } from '../config';
-import { DEVICES } from '../config/devices';
+import { OFFLINE_TIMEOUT_LIVE_MS, OFFLINE_TIMEOUT_SIM_MS, SAMPLING_INTERVAL_MS, SIM_TICK_MS } from '../config';
+import { NODES, telemetryTopic } from '../config/devices';
 import { mqttService } from '../mqtt/client';
-import { useSmartHome } from '../store/useStore';
+import { useIiotStore } from '../store/useStore';
 
 export default function ConnectionPanel() {
-  const mode = useSmartHome((s) => s.mode);
-  const brokerStatus = useSmartHome((s) => s.brokerStatus);
-  const brokerUrl = useSmartHome((s) => s.brokerUrl);
-  const mqttUsername = useSmartHome((s) => s.mqttUsername);
-  const mqttPassword = useSmartHome((s) => s.mqttPassword);
-  const commandTimeoutMs = useSmartHome((s) => s.commandTimeoutMs);
-  const setMode = useSmartHome((s) => s.setMode);
-  const setBrokerUrl = useSmartHome((s) => s.setBrokerUrl);
-  const setCredentials = useSmartHome((s) => s.setCredentials);
-  const setCommandTimeoutMs = useSmartHome((s) => s.setCommandTimeoutMs);
+  const mode = useIiotStore((s) => s.mode);
+  const brokerStatus = useIiotStore((s) => s.brokerStatus);
+  const brokerUrl = useIiotStore((s) => s.brokerUrl);
+  const mqttUsername = useIiotStore((s) => s.mqttUsername);
+  const mqttPassword = useIiotStore((s) => s.mqttPassword);
+  const setMode = useIiotStore((s) => s.setMode);
+  const setBrokerUrl = useIiotStore((s) => s.setBrokerUrl);
+  const setCredentials = useIiotStore((s) => s.setCredentials);
 
   const [url, setUrl] = useState(brokerUrl);
   const [username, setUsername] = useState(mqttUsername);
   const [password, setPassword] = useState(mqttPassword);
-  const [timeout, setTimeout] = useState(String(commandTimeoutMs));
 
   const connect = () => {
     if (mode !== 'LIVE') {
-      useSmartHome.getState().addEvent('info', 'Pindah ke mode LIVE untuk terhubung ke broker');
+      useIiotStore.getState().addEvent('info', 'Pindah ke mode LIVE untuk terhubung ke broker');
       setMode('LIVE');
     }
     setBrokerUrl(url);
@@ -66,8 +63,8 @@ export default function ConnectionPanel() {
       </div>
       <p className="hint">
         {mode === 'SIMULATION'
-          ? 'Mode simulasi: data sintetis, tidak ada publish ke broker.'
-          : 'Mode live: data & perintah dari/ke broker MQTT. Bila broker terputus, aplikasi tetap LIVE dengan status DISCONNECTED.'}
+          ? `Mode simulasi dipercepat: 1 bacaan per node tiap ${SIM_TICK_MS / 1000} detik (baseline SRS 1 menit). Data sintetis, tidak ada publish ke broker.`
+          : 'Mode live: data hanya dari broker MQTT (subscribe-only — aplikasi tidak pernah publish). Bila broker terputus, aplikasi tetap LIVE dengan status DISCONNECTED.'}
       </p>
 
       <label className="field">
@@ -104,25 +101,8 @@ export default function ConnectionPanel() {
       </div>
       <p className="hint">
         Kredensial disimpan di localStorage browser saja, tidak pernah masuk source code
-        atau log. Gunakan akun broker berhak minimum (NFR-12).
+        atau log. Gunakan akun broker berhak minimum (subscribe-only).
       </p>
-
-      <label className="field">
-        <span>Timeout perintah (ms) — default {DEFAULT_COMMAND_TIMEOUT_MS}</span>
-        <input
-          type="number"
-          min={500}
-          max={30000}
-          step={500}
-          value={timeout}
-          onChange={(e) => {
-            setTimeout(e.target.value);
-            const v = Number(e.target.value);
-            if (Number.isFinite(v) && v >= 500 && v <= 30000) setCommandTimeoutMs(v);
-          }}
-          aria-label="Timeout perintah dalam milidetik"
-        />
-      </label>
 
       <div className="conn-actions">
         <button
@@ -143,15 +123,33 @@ export default function ConnectionPanel() {
         </button>
       </div>
 
+      <dl className="kv-list">
+        <div>
+          <dt>Interval sampling (baseline SRS)</dt>
+          <dd>{SAMPLING_INTERVAL_MS / 1000} detik</dd>
+        </div>
+        <div>
+          <dt>Interval simulasi (dipercepat)</dt>
+          <dd>{SIM_TICK_MS / 1000} detik</dd>
+        </div>
+        <div>
+          <dt>Timeout offline — LIVE</dt>
+          <dd>{OFFLINE_TIMEOUT_LIVE_MS / 1000} detik (3× sampling)</dd>
+        </div>
+        <div>
+          <dt>Timeout offline — SIMULATION</dt>
+          <dd>{OFFLINE_TIMEOUT_SIM_MS / 1000} detik</dd>
+        </div>
+      </dl>
+
       <details className="device-config">
-        <summary>Konfigurasi perangkat ({DEVICES.length})</summary>
+        <summary>Topik subscribe ({NODES.length} node)</summary>
         <ul>
-          {DEVICES.map((d) => (
-            <li key={d.deviceId}>
-              <strong>{d.roomName}</strong> — {d.roomId} / {d.deviceId}
-              {d.hasTelemetry ? ' • telemetri' : ' • lampu saja'}
+          {NODES.map((n) => (
+            <li key={n.deviceId}>
+              <strong>{n.roomId}</strong> — {n.deviceId}
               <br />
-              <code>smarthome/{d.roomId}/{d.deviceId}/#</code>
+              <code>{telemetryTopic(n.roomId, n.deviceId)}</code>
             </li>
           ))}
         </ul>

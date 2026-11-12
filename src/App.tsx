@@ -1,6 +1,9 @@
-// App — komposisi dashboard (SRS §5.1).
+// App — komposisi dashboard IIoT Catering (SRS v1.1 MVP).
+// Tab: Dashboard / Riwayat / Perangkat / Threshold / Alert.
 // Efek mode: SIMULATION → jalankan simulasi & putuskan broker live;
 // LIVE → hentikan simulasi (tetap LIVE walau broker DISCONNECTED, AC-10).
+// Saat mount: pulihkan threshold/perangkat/alert/histori dari IndexedDB,
+// lalu mulai simulasi (mode default SIMULATION).
 import { useEffect, useState } from 'react';
 import StatusBar from './components/StatusBar';
 import HouseScene from './components/HouseScene';
@@ -8,15 +11,46 @@ import TelemetryPanel from './components/TelemetryPanel';
 import DevicePanel from './components/DevicePanel';
 import EventLog from './components/EventLog';
 import ConnectionPanel from './components/ConnectionPanel';
-import { useSmartHome } from './store/useStore';
+import ThresholdPanel from './components/ThresholdPanel';
+import AlertsPanel from './components/AlertsPanel';
+import HistoryPanel from './components/HistoryPanel';
+import RoomCards, { FlowStrip } from './components/RoomCards';
+import { activeAlertCount, useIiotStore } from './store/useStore';
 import { mqttService } from './mqtt/client';
 import { startSimulation, stopSimulation } from './sim/simulation';
 
+type Tab = 'dashboard' | 'riwayat' | 'perangkat' | 'threshold' | 'alert';
+
+const TABS: Array<{ id: Tab; label: string }> = [
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'riwayat', label: 'Riwayat' },
+  { id: 'perangkat', label: 'Perangkat' },
+  { id: 'threshold', label: 'Threshold' },
+  { id: 'alert', label: 'Alert' },
+];
+
 export default function App() {
-  const mode = useSmartHome((s) => s.mode);
-  const scene = useSmartHome((s) => s.scene);
-  const setScene = useSmartHome((s) => s.setScene);
+  const mode = useIiotStore((s) => s.mode);
+  const scene = useIiotStore((s) => s.scene);
+  const setScene = useIiotStore((s) => s.setScene);
+  const alerts = useIiotStore((s) => s.alerts);
   const [sceneStatus, setSceneStatus] = useState('LOADING');
+  const [tab, setTab] = useState<Tab>('dashboard');
+
+  // Pulihkan data lokal sekali saat mount, lalu mulai simulasi bila mode SIMULATION.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      await useIiotStore.getState().restoreFromDb();
+      if (!cancelled && useIiotStore.getState().mode === 'SIMULATION') {
+        startSimulation();
+      }
+    })();
+    return () => {
+      cancelled = true;
+      stopSimulation();
+    };
+  }, []);
 
   useEffect(() => {
     if (mode === 'SIMULATION') {
@@ -30,55 +64,96 @@ export default function App() {
     };
   }, [mode]);
 
+  // Pemeriksaan offline berkala (5 dtk) — AC-10.
+  useEffect(() => {
+    const id = setInterval(() => useIiotStore.getState().checkOffline(Date.now()), 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  const activeAlerts = activeAlertCount(alerts);
+
   return (
     <div className="app">
       <StatusBar sceneStatus={sceneStatus} />
-      <main className="layout">
-        <div className="canvas-wrap">
-          <HouseScene onReady={() => setSceneStatus('READY')} />
-          <div className="canvas-hint">
-            Seret untuk rotate • Klik kanan seret untuk pan • Scroll untuk zoom • Klik lampu
-            untuk menyalakan/mematikan
+      <nav className="tabs" aria-label="Navigasi utama">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            className={`tab-btn${tab === t.id ? ' active' : ''}`}
+            aria-pressed={tab === t.id}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+            {t.id === 'alert' && activeAlerts > 0 && (
+              <span className="tab-badge" aria-label={`${activeAlerts} alert aktif`}>
+                {activeAlerts}
+              </span>
+            )}
+          </button>
+        ))}
+      </nav>
+      <main className="main">
+        {tab === 'dashboard' && (
+          <>
+            <FlowStrip />
+            <div className="layout">
+              <div className="canvas-wrap">
+                <HouseScene onReady={() => setSceneStatus('READY')} />
+                <div className="canvas-hint">
+                  Seret untuk rotate • Klik kanan seret untuk pan • Scroll untuk zoom • Klik
+                  ruangan atau beacon sensor untuk memilih
+                </div>
+                <fieldset className="scene-settings">
+                  <legend>Pengaturan tampilan (lokal — tidak mengubah perangkat)</legend>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={scene.autoRotate}
+                      onChange={(e) => setScene({ autoRotate: e.target.checked })}
+                    />
+                    Auto-rotate
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={scene.shadows}
+                      onChange={(e) => setScene({ shadows: e.target.checked })}
+                    />
+                    Bayangan
+                  </label>
+                  <label>
+                    Kualitas
+                    <select
+                      value={scene.quality}
+                      onChange={(e) =>
+                        setScene({ quality: e.target.value === 'low' ? 'low' : 'high' })
+                      }
+                      aria-label="Kualitas render"
+                    >
+                      <option value="high">Tinggi</option>
+                      <option value="low">Rendah</option>
+                    </select>
+                  </label>
+                </fieldset>
+              </div>
+              <aside className="sidebar">
+                <TelemetryPanel />
+                <EventLog />
+              </aside>
+            </div>
+            <RoomCards />
+          </>
+        )}
+        {tab === 'riwayat' && <HistoryPanel />}
+        {tab === 'perangkat' && (
+          <div className="tab-stack">
+            <DevicePanel />
+            <ConnectionPanel />
           </div>
-          <fieldset className="scene-settings">
-            <legend>Pengaturan tampilan (lokal — tidak mengubah perangkat)</legend>
-            <label>
-              <input
-                type="checkbox"
-                checked={scene.autoRotate}
-                onChange={(e) => setScene({ autoRotate: e.target.checked })}
-              />
-              Auto-rotate
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={scene.shadows}
-                onChange={(e) => setScene({ shadows: e.target.checked })}
-              />
-              Bayangan
-            </label>
-            <label>
-              Kualitas
-              <select
-                value={scene.quality}
-                onChange={(e) =>
-                  setScene({ quality: e.target.value === 'low' ? 'low' : 'high' })
-                }
-                aria-label="Kualitas render"
-              >
-                <option value="high">Tinggi</option>
-                <option value="low">Rendah</option>
-              </select>
-            </label>
-          </fieldset>
-        </div>
-        <aside className="sidebar">
-          <TelemetryPanel />
-          <DevicePanel />
-          <ConnectionPanel />
-          <EventLog />
-        </aside>
+        )}
+        {tab === 'threshold' && <ThresholdPanel />}
+        {tab === 'alert' && <AlertsPanel />}
       </main>
     </div>
   );

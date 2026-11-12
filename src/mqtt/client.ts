@@ -1,20 +1,16 @@
-// MQTT integration module — SRS §4.1, §6, FR-24/25.
-// Satu-satunya tempat yang menyentuh mqtt.js. UI dan scene 3D TIDAK BOLEH
-// mengimpor modul ini; mereka memakai store + commandService.
+// MQTT integration module — SRS IIoT Catering v1.1 §6, FR-02.
+// SUBSCRIBE-ONLY. Satu-satunya tempat yang menyentuh mqtt.js. UI dan scene 3D
+// TIDAK BOLEH mengimpor modul ini; mereka memakai store.
 // Tanggung jawab: connect, subscribe (QoS 1), route pesan → validator → store,
-// reconnect + resubscribe otomatis, publish command (QoS 1, retain false).
+// reconnect + resubscribe otomatis (backoff), retained dengan freshness check.
+//
+// TIDAK ADA method publish di modul ini — MVP adalah monitoring-only; tidak
+// ada perintah yang dikirim ke perangkat (tidak ada kontrol lampu/HVAC).
 import mqtt from 'mqtt';
 import type { MqttClient } from 'mqtt';
-import { lampCommandTopic, subscribeTopics } from '../config';
-import { DEVICES, deviceById } from '../config/devices';
-import { useSmartHome } from '../store/useStore';
-import {
-  parseJson,
-  validateAvailability,
-  validateLampState,
-  validateTelemetry,
-} from '../lib/validate';
-import type { LampCommandPayload } from '../lib/validate';
+import { subscribeTopics } from '../config/devices';
+import { useIiotStore } from '../store/useStore';
+import { parseJson, validateTelemetry } from '../lib/validate';
 
 class MqttService {
   private client: MqttClient | null = null;
@@ -25,11 +21,11 @@ class MqttService {
 
   connect(url: string, username?: string, password?: string): void {
     this.disconnect();
-    const store = useSmartHome.getState();
+    const store = useIiotStore.getState();
     store.setBrokerStatus('CONNECTING');
     store.addEvent('connection', `Menghubungkan ke broker ${url} …`);
 
-    const clientId = `smarthome-web-${Math.random().toString(36).slice(2, 10)}`;
+    const clientId = `iiot-catering-web-${Math.random().toString(36).slice(2, 10)}`;
     this.client = mqtt.connect(url, {
       clientId,
       username: username || undefined,
@@ -40,29 +36,28 @@ class MqttService {
     });
 
     this.client.on('connect', () => {
-      const s = useSmartHome.getState();
+      const s = useIiotStore.getState();
       s.setBrokerStatus('CONNECTED');
-      s.addEvent('connection', 'Terhubung ke broker — resubscribe semua topik');
+      s.addEvent('connection', 'Terhubung ke broker — resubscribe semua topik telemetri');
       this.resubscribe();
     });
 
     this.client.on('reconnect', () => {
-      useSmartHome.getState().setBrokerStatus('CONNECTING');
+      useIiotStore.getState().setBrokerStatus('CONNECTING');
     });
 
     const onDown = () => {
-      const s = useSmartHome.getState();
+      const s = useIiotStore.getState();
       if (s.brokerStatus !== 'DISCONNECTED') {
         s.setBrokerStatus('DISCONNECTED');
         s.addEvent('connection', 'Koneksi broker terputus — mencoba reconnect otomatis');
-        s.clearPendingOnDisconnect();
       }
     };
     this.client.on('offline', onDown);
     this.client.on('close', onDown);
 
     this.client.on('error', (err) => {
-      const s = useSmartHome.getState();
+      const s = useIiotStore.getState();
       s.setBrokerStatus('ERROR');
       s.addEvent('connection', `Error koneksi broker: ${err.message}`);
     });
@@ -72,15 +67,13 @@ class MqttService {
     });
   }
 
-  /** Subscribe ulang semua topik aktif (FR-24/25) — dipanggil setiap (re)connect. */
+  /** Subscribe ulang semua topik telemetri — dipanggil setiap (re)connect. */
   resubscribe(): void {
     if (!this.client) return;
-    const topics = DEVICES.flatMap((d) => subscribeTopics(d));
+    const topics = subscribeTopics();
     this.client.subscribe(topics, { qos: 1 }, (err) => {
       if (err) {
-        useSmartHome
-          .getState()
-          .addEvent('connection', `Gagal subscribe: ${err.message}`);
+        useIiotStore.getState().addEvent('connection', `Gagal subscribe: ${err.message}`);
       }
     });
   }
@@ -94,68 +87,41 @@ class MqttService {
       }
       this.client = null;
     }
-    const s = useSmartHome.getState();
+    const s = useIiotStore.getState();
     if (s.brokerStatus !== 'DISCONNECTED') {
       s.setBrokerStatus('DISCONNECTED');
-      s.clearPendingOnDisconnect();
     }
-  }
-
-  /** Publish command lampu: QoS 1, retain FALSE (AC-04, R-02). */
-  publishCommand(deviceId: string, payload: LampCommandPayload): boolean {
-    if (!this.client || !this.client.connected) return false;
-    const device = deviceById(deviceId);
-    if (!device) return false;
-    this.client.publish(
-      lampCommandTopic(device),
-      JSON.stringify(payload),
-      { qos: 1, retain: false },
-      (err) => {
-        if (err) {
-          useSmartHome
-            .getState()
-            .addEvent('command', `Gagal publish command ke ${deviceId}: ${err.message}`);
-        }
-      },
-    );
-    return true;
   }
 
   private handleMessage(topic: string, raw: string): void {
-    const store = useSmartHome.getState();
+    const store = useIiotStore.getState();
     const now = Date.now();
-    // Cari perangkat pemilik topik ini.
-    const device = DEVICES.find((d) => topic.startsWith(`smarthome/${d.roomId}/${d.deviceId}/`));
-    if (!device) return; // topik di luar konteks — abaikan
+    // Topik: iiot/catering/{room_id}/{device_id}/telemetry
+    const m = /^iiot\/catering\/(R0\d)\/(NODE-R0\d-\d{3})\/telemetry$/.exec(topic);
+    if (!m) return; // topik di luar kontrak — abaikan
+    const [, topicRoomId, topicDeviceId] = m;
     const parsed = parseJson(raw);
     if (!parsed.ok) {
-      store.addEvent('validation', `Pesan ditolak (${topic}): ${parsed.error}`);
+      store.recordInvalid(topicDeviceId, `Payload bukan JSON: ${parsed.error}`, now);
       return;
     }
-    if (topic.endsWith('/telemetry')) {
-      const v = validateTelemetry(parsed.value, device.deviceId, now);
-      if (!v.ok) {
-        store.addEvent('validation', `Telemetri ditolak (${device.deviceId}): ${v.error}`);
-        return;
-      }
-      store.applyTelemetry(v.value, now);
-    } else if (topic.endsWith('/availability')) {
-      const v = validateAvailability(parsed.value, device.deviceId, now);
-      if (!v.ok) {
-        store.addEvent('validation', `Availability ditolak (${device.deviceId}): ${v.error}`);
-        return;
-      }
-      store.applyAvailability(v.value, now);
-    } else if (topic.endsWith('/lamp/state')) {
-      const v = validateLampState(parsed.value, device.deviceId, now);
-      if (!v.ok) {
-        store.addEvent('validation', `State lampu ditolak (${device.deviceId}): ${v.error}`);
-        return;
-      }
-      store.applyLampState(v.value, now);
+    // device_id/room_id payload harus cocok dengan topik (FR-02).
+    if (parsed.value.device_id !== topicDeviceId || parsed.value.room_id !== topicRoomId) {
+      store.recordInvalid(
+        topicDeviceId,
+        'device_id/room_id payload tidak sesuai topik',
+        now,
+      );
+      return;
     }
-    // Topik lain (mis. /lamp/command yang tidak sengaja ter-subscribe) diabaikan:
-    // web app tidak boleh memproses command sebagai state.
+    const v = validateTelemetry(parsed.value, now);
+    if (!v.ok) {
+      store.recordInvalid(topicDeviceId, v.error, now);
+      return;
+    }
+    // Pesan retained lama tetap diproses (dedup berdasarkan timestamp menolak
+    // yang lebih lama dari bacaan terakhir); freshness dinilai dari last_seen.
+    store.applyTelemetry(v.value, now);
   }
 }
 

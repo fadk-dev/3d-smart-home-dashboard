@@ -1,37 +1,67 @@
-// Unit test store — SRS §4.5/§4.6, FR-08/09/10/12/17, AC-06/07/13.
+// Unit test store — SRS §7, FR-03/06/07/08, AC-06/09/10.
 // Store adalah singleton Zustand; setiap test mereset state lewat setState.
 import { beforeEach, describe, expect, it } from 'vitest';
-import { DEVICES } from '../../config/devices';
 import { HISTORY_CAPACITY } from '../../config';
-import { useSmartHome } from '../useStore';
-import type { DeviceRuntime } from '../useStore';
+import { DEFAULT_THRESHOLDS, NODES, ROOMS } from '../../config/devices';
+import type { RoomId } from '../../config';
+import { effectiveDeviceStatus, useIiotStore } from '../useStore';
+import type { DeviceRuntime, RoomRuntime } from '../useStore';
+import type { TelemetryPayload } from '../../lib/validate';
 
 const NOW = 1_794_480_000_000;
 
 function freshDevices(): Record<string, DeviceRuntime> {
   const out: Record<string, DeviceRuntime> = {};
-  for (const config of DEVICES) {
+  for (const config of NODES) {
     out[config.deviceId] = {
       config,
-      availability: 'UNKNOWN',
-      availabilityReceivedAt: null,
-      confirmedState: null,
-      pending: null,
-      lastOutcome: null,
+      enabled: true,
+      status: 'OFFLINE',
+      lastSeen: null,
+      lastTs: undefined,
+      lastReading: null,
+      lastInvalidAt: null,
+      invalidCount: 0,
+      lastTelemetryLogAt: null,
     };
   }
   return out;
 }
 
+function freshRooms(): Record<RoomId, RoomRuntime> {
+  const out = {} as Record<RoomId, RoomRuntime>;
+  for (const r of ROOMS) {
+    out[r.id] = { roomId: r.id, latest: null, latestDeviceId: null, receivedAt: null, history: [] };
+  }
+  return out;
+}
+
 function resetStore(): void {
-  useSmartHome.setState({
+  useIiotStore.setState({
     mode: 'SIMULATION',
     brokerStatus: 'DISCONNECTED',
+    bootAt: NOW - 1_000_000,
+    rooms: freshRooms(),
     devices: freshDevices(),
-    telemetry: null,
-    history: [],
+    thresholds: structuredClone(DEFAULT_THRESHOLDS),
+    alerts: [],
     events: [],
+    invalidThrottle: {},
   });
+}
+
+function payload(over: Partial<TelemetryPayload> = {}): TelemetryPayload {
+  return {
+    deviceId: 'NODE-R06-001',
+    roomId: 'R06',
+    ts: NOW,
+    timestamp: '2026-11-12T10:40:00Z',
+    humidity: 60,
+    temperature: 23,
+    pressure: 8,
+    pressureReference: 'R05',
+    ...over,
+  };
 }
 
 beforeEach(() => {
@@ -39,140 +69,194 @@ beforeEach(() => {
 });
 
 describe('applyTelemetry', () => {
-  it('menyimpan snapshot & menambah histori (maks 60 titik)', () => {
-    const s = useSmartHome.getState();
+  it('menyimpan latest + menambah histori (maks HISTORY_CAPACITY)', () => {
+    const store = useIiotStore.getState();
     for (let i = 0; i < HISTORY_CAPACITY + 5; i++) {
-      useSmartHome.getState().applyTelemetry(
-        {
-          schemaVersion: '1.0',
-          deviceId: 'esp32_01',
-          ts: NOW + i * 2000,
-          seq: i + 1,
-          temperatureC: 28,
-          humidityPct: 65,
-        },
-        NOW + i * 2000,
-      );
+      useIiotStore.getState().applyTelemetry(payload({ ts: NOW + i * 5000 }), NOW + i * 5000);
     }
-    const after = useSmartHome.getState();
-    expect(after.history.length).toBe(HISTORY_CAPACITY);
-    expect(after.telemetry?.temperatureC).toBe(28);
-    expect(after.telemetry?.ts).toBe(NOW + (HISTORY_CAPACITY + 4) * 2000);
-    expect(s).toBeDefined();
+    const after = useIiotStore.getState();
+    expect(after.rooms.R06.history.length).toBe(HISTORY_CAPACITY);
+    expect(after.rooms.R06.latest?.temperature).toBe(23);
+    expect(after.rooms.R06.latest?.ts).toBe(NOW + (HISTORY_CAPACITY + 4) * 5000);
+    expect(after.devices['NODE-R06-001'].lastSeen).toBe(NOW + (HISTORY_CAPACITY + 4) * 5000);
+    expect(store).toBeDefined();
   });
 
-  it('telemetri duplikat / seq lebih lama tidak mengubah state', () => {
-    const store = useSmartHome.getState();
-    const payload = {
-      schemaVersion: '1.0' as const,
-      deviceId: 'esp32_01',
-      ts: NOW,
-      seq: 10,
-      temperatureC: 28.5,
-    };
-    store.applyTelemetry(payload, NOW);
-    store.applyTelemetry({ ...payload, temperatureC: 99 }, NOW); // duplikat seq — suhu 99 di luar rentang tapi store tidak memvalidasi; dedup yang menolak
-    expect(useSmartHome.getState().telemetry?.temperatureC).toBe(28.5);
-    expect(useSmartHome.getState().history.length).toBe(1);
-    store.applyTelemetry({ ...payload, seq: 9, ts: NOW + 1000, temperatureC: 20 }, NOW);
-    expect(useSmartHome.getState().telemetry?.temperatureC).toBe(28.5);
-  });
-});
-
-describe('applyLampState — rekonsiliasi pending', () => {
-  it('state dengan requestId cocok menyelesaikan pending & mengupdate confirmed', () => {
-    const store = useSmartHome.getState();
-    store.startPending('esp32_01', { requestId: 'req-1', targetState: 'ON', issuedAt: NOW });
-    store.applyLampState(
-      { schemaVersion: '1.0', deviceId: 'esp32_01', requestId: 'req-1', state: 'ON', ts: NOW, seq: 1 },
-      NOW,
-    );
-    const dev = useSmartHome.getState().devices['esp32_01'];
-    expect(dev.confirmedState).toBe('ON');
-    expect(dev.pending).toBeNull();
+  it('telemetri duplikat / lebih lama tidak mengubah state', () => {
+    const store = useIiotStore.getState();
+    store.applyTelemetry(payload({ temperature: 23 }), NOW);
+    store.applyTelemetry(payload({ temperature: 99 }), NOW); // duplikat ts
+    expect(useIiotStore.getState().rooms.R06.latest?.temperature).toBe(23);
+    expect(useIiotStore.getState().rooms.R06.history.length).toBe(1);
+    store.applyTelemetry(payload({ ts: NOW - 1000, temperature: 20 }), NOW);
+    expect(useIiotStore.getState().rooms.R06.latest?.temperature).toBe(23);
   });
 
-  it('state TANPA requestId tetap mengupdate confirmed (SRS §4.6)', () => {
-    const store = useSmartHome.getState();
-    store.applyLampState(
-      { schemaVersion: '1.0', deviceId: 'esp32_01', state: 'OFF', ts: NOW, seq: 1 },
-      NOW,
-    );
-    expect(useSmartHome.getState().devices['esp32_01'].confirmedState).toBe('OFF');
+  it('bacaan dari perangkat disabled diabaikan', () => {
+    const store = useIiotStore.getState();
+    store.setDeviceEnabled('NODE-R06-001', false);
+    store.applyTelemetry(payload(), NOW);
+    expect(useIiotStore.getState().rooms.R06.latest).toBeNull();
   });
 
-  it('state dengan requestId yang tidak cocok tidak menyelesaikan pending', () => {
-    const store = useSmartHome.getState();
-    store.startPending('esp32_01', { requestId: 'req-1', targetState: 'ON', issuedAt: NOW });
-    store.applyLampState(
-      { schemaVersion: '1.0', deviceId: 'esp32_01', requestId: 'req- lain', state: 'OFF', ts: NOW, seq: 1 },
-      NOW,
+  it('dua node R07 menulis ke ruangan yang sama', () => {
+    const store = useIiotStore.getState();
+    store.applyTelemetry(payload({ deviceId: 'NODE-R07-001', roomId: 'R07', pressure: null }), NOW);
+    store.applyTelemetry(
+      payload({ deviceId: 'NODE-R07-002', roomId: 'R07', pressure: null, ts: NOW + 5000, temperature: 14 }),
+      NOW + 5000,
     );
-    const dev = useSmartHome.getState().devices['esp32_01'];
-    expect(dev.confirmedState).toBe('OFF'); // confirmed tetap diperbarui
-    expect(dev.pending?.requestId).toBe('req-1'); // pending lain tetap menunggu
-  });
-
-  it('state lebih lama (seq lebih kecil) tidak meregresi confirmed (AC-13)', () => {
-    const store = useSmartHome.getState();
-    store.applyLampState(
-      { schemaVersion: '1.0', deviceId: 'esp32_01', state: 'ON', ts: NOW, seq: 10 },
-      NOW,
-    );
-    store.applyLampState(
-      { schemaVersion: '1.0', deviceId: 'esp32_01', state: 'OFF', ts: NOW - 1000, seq: 9 },
-      NOW,
-    );
-    expect(useSmartHome.getState().devices['esp32_01'].confirmedState).toBe('ON');
+    const room = useIiotStore.getState().rooms.R07;
+    expect(room.history.length).toBe(2);
+    expect(room.latestDeviceId).toBe('NODE-R07-002');
   });
 });
 
-describe('timeout & disconnect', () => {
-  it('markCommandTimeout hanya untuk requestId yang cocok; state terakhir dipertahankan', () => {
-    const store = useSmartHome.getState();
-    store.applyLampState(
-      { schemaVersion: '1.0', deviceId: 'esp32_01', state: 'OFF', ts: NOW, seq: 1 },
-      NOW,
-    );
-    store.startPending('esp32_01', { requestId: 'req-1', targetState: 'ON', issuedAt: NOW });
-    store.markCommandTimeout('esp32_01', 'req-salah');
-    expect(useSmartHome.getState().devices['esp32_01'].pending).not.toBeNull();
-    store.markCommandTimeout('esp32_01', 'req-1');
-    const dev = useSmartHome.getState().devices['esp32_01'];
-    expect(dev.pending).toBeNull();
-    expect(dev.lastOutcome).toBe('TIMEOUT');
-    expect(dev.confirmedState).toBe('OFF'); // confirmed terakhir dipertahankan
+describe('alert — dedup & auto-resolve (FR-07)', () => {
+  it('pelanggaran berulang TIDAK membuat alert duplikat', () => {
+    const store = useIiotStore.getState();
+    store.applyTelemetry(payload({ pressure: 20 }), NOW); // Pressure High (max 15)
+    store.applyTelemetry(payload({ pressure: 21, ts: NOW + 5000 }), NOW + 5000);
+    store.applyTelemetry(payload({ pressure: 22, ts: NOW + 10_000 }), NOW + 10_000);
+    const alerts = useIiotStore.getState().alerts;
+    expect(alerts.filter((a) => a.alertType === 'Pressure High')).toHaveLength(1);
+    expect(alerts[0].status).toBe('Active');
+    expect(alerts[0].actualValue).toBe(20); // nilai pertama yang memicu
   });
 
-  it('clearPendingOnDisconnect membatalkan pending tanpa klaim gagal', () => {
-    const store = useSmartHome.getState();
-    store.startPending('esp32_01', { requestId: 'req-1', targetState: 'ON', issuedAt: NOW });
-    store.startPending('esp32_02', { requestId: 'req-2', targetState: 'OFF', issuedAt: NOW });
-    store.clearPendingOnDisconnect();
-    const s = useSmartHome.getState();
-    expect(s.devices['esp32_01'].pending).toBeNull();
-    expect(s.devices['esp32_01'].lastOutcome).toBe('DISCONNECTED');
-    expect(s.devices['esp32_02'].pending).toBeNull();
+  it('nilai kembali normal → alert auto-resolve', () => {
+    const store = useIiotStore.getState();
+    store.applyTelemetry(payload({ pressure: 20 }), NOW);
+    expect(useIiotStore.getState().alerts).toHaveLength(1);
+    store.applyTelemetry(payload({ pressure: 8, ts: NOW + 5000 }), NOW + 5000);
+    const alerts = useIiotStore.getState().alerts;
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].status).toBe('Resolved');
+    expect(alerts[0].resolvedAt).toBe(NOW + 5000);
+  });
+
+  it('parameter berbeda → alert berbeda; yang normal ter-resolve sendiri', () => {
+    const store = useIiotStore.getState();
+    store.applyTelemetry(payload({ humidity: 90, temperature: 30 }), NOW);
+    expect(useIiotStore.getState().alerts).toHaveLength(2);
+    store.applyTelemetry(payload({ humidity: 60, temperature: 30, ts: NOW + 5000 }), NOW + 5000);
+    const alerts = useIiotStore.getState().alerts;
+    expect(alerts.find((a) => a.alertType === 'Humidity High')?.status).toBe('Resolved');
+    expect(alerts.find((a) => a.alertType === 'Temperature High')?.status).toBe('Active');
+  });
+
+  it('acknowledge & resolve manual mengubah status', () => {
+    const store = useIiotStore.getState();
+    store.applyTelemetry(payload({ pressure: 20 }), NOW);
+    const id = useIiotStore.getState().alerts[0].id;
+    store.acknowledgeAlert(id);
+    expect(useIiotStore.getState().alerts[0].status).toBe('Acknowledged');
+    store.resolveAlert(id);
+    expect(useIiotStore.getState().alerts[0].status).toBe('Resolved');
   });
 });
 
-describe('applyAvailability', () => {
-  it('online/offline mengubah indikator; pesan lebih lama diabaikan', () => {
-    const store = useSmartHome.getState();
-    store.applyAvailability(
-      { schemaVersion: '1.0', deviceId: 'esp32_01', status: 'online', ts: NOW },
-      NOW,
-    );
-    expect(useSmartHome.getState().devices['esp32_01'].availability).toBe('ONLINE');
-    store.applyAvailability(
-      { schemaVersion: '1.0', deviceId: 'esp32_01', status: 'offline', ts: NOW - 5000 },
-      NOW,
-    );
-    expect(useSmartHome.getState().devices['esp32_01'].availability).toBe('ONLINE');
-    store.applyAvailability(
-      { schemaVersion: '1.0', deviceId: 'esp32_01', status: 'offline', ts: NOW + 1000 },
-      NOW + 1000,
-    );
-    expect(useSmartHome.getState().devices['esp32_01'].availability).toBe('OFFLINE');
+describe('device offline (AC-10)', () => {
+  it('tanpa bacaan > 30 dtk (SIM) → OFFLINE + alert Device Offline', () => {
+    const store = useIiotStore.getState();
+    store.applyTelemetry(payload(), NOW);
+    store.checkOffline(NOW + 31_000);
+    const dev = useIiotStore.getState().devices['NODE-R06-001'];
+    expect(dev.status).toBe('OFFLINE');
+    expect(
+      useIiotStore.getState().alerts.some((a) => a.alertType === 'Device Offline'),
+    ).toBe(true);
+  });
+
+  it('checkOffline berulang tidak menduplikasi alert offline', () => {
+    const store = useIiotStore.getState();
+    store.applyTelemetry(payload(), NOW);
+    store.checkOffline(NOW + 31_000);
+    store.checkOffline(NOW + 60_000);
+    expect(
+      useIiotStore.getState().alerts.filter((a) => a.alertType === 'Device Offline'),
+    ).toHaveLength(1);
+  });
+
+  it('bacaan masuk lagi → ONLINE + alert offline auto-resolve', () => {
+    const store = useIiotStore.getState();
+    store.applyTelemetry(payload(), NOW);
+    store.checkOffline(NOW + 31_000);
+    store.applyTelemetry(payload({ ts: NOW + 40_000 }), NOW + 40_000);
+    const dev = useIiotStore.getState().devices['NODE-R06-001'];
+    expect(dev.status).toBe('ONLINE');
+    expect(
+      useIiotStore.getState().alerts.find((a) => a.alertType === 'Device Offline')?.status,
+    ).toBe('Resolved');
+  });
+
+  it('timeout LIVE 180 dtk: 100 dtk belum offline, 181 dtk offline', () => {
+    useIiotStore.setState({ mode: 'LIVE' });
+    const store = useIiotStore.getState();
+    store.applyTelemetry(payload(), NOW);
+    store.checkOffline(NOW + 100_000);
+    expect(useIiotStore.getState().devices['NODE-R06-001'].status).toBe('ONLINE');
+    store.checkOffline(NOW + 181_000);
+    expect(useIiotStore.getState().devices['NODE-R06-001'].status).toBe('OFFLINE');
+  });
+
+  it('perangkat disabled TIDAK pernah memicu alert offline', () => {
+    const store = useIiotStore.getState();
+    store.setDeviceEnabled('NODE-R06-001', false);
+    store.checkOffline(NOW + 1_000_000);
+    const dev = useIiotStore.getState().devices['NODE-R06-001'];
+    expect(effectiveDeviceStatus(dev, NOW + 1_000_000)).toBe('DISABLED');
+    expect(
+      useIiotStore.getState().alerts.some((a) => a.alertType === 'Device Offline'),
+    ).toBe(false);
+  });
+});
+
+describe('recordInvalid — throttle 1/menit', () => {
+  it('invalid pertama membuat alert; kedua dalam 1 menit diabaikan', () => {
+    const store = useIiotStore.getState();
+    store.recordInvalid('NODE-R06-001', 'humidity di luar rentang', NOW);
+    store.recordInvalid('NODE-R06-001', 'humidity di luar rentang', NOW + 30_000);
+    const alerts = useIiotStore.getState().alerts;
+    expect(alerts.filter((a) => a.alertType === 'Invalid Sensor Data')).toHaveLength(1);
+    expect(useIiotStore.getState().devices['NODE-R06-001'].invalidCount).toBe(1);
+    store.recordInvalid('NODE-R06-001', 'humidity di luar rentang', NOW + 61_000);
+    expect(useIiotStore.getState().devices['NODE-R06-001'].invalidCount).toBe(2);
+  });
+
+  it('bacaan valid berikutnya me-resolve alert Invalid Sensor Data', () => {
+    const store = useIiotStore.getState();
+    store.recordInvalid('NODE-R06-001', 'payload rusak', NOW);
+    store.applyTelemetry(payload({ ts: NOW + 1000 }), NOW + 1000);
+    expect(
+      useIiotStore.getState().alerts.find((a) => a.alertType === 'Invalid Sensor Data')
+        ?.status,
+    ).toBe('Resolved');
+  });
+});
+
+describe('threshold (FR-06)', () => {
+  it('setThreshold mengubah nilai bila min < max; menolak min >= max', () => {
+    const store = useIiotStore.getState();
+    expect(store.setThreshold('R06', 'pressure', 3, 12)).toBe(true);
+    expect(useIiotStore.getState().thresholds.R06.pressure?.max).toBe(12);
+    expect(store.setThreshold('R06', 'pressure', 12, 3)).toBe(false);
+    expect(store.setThreshold('R06', 'pressure', 5, 5)).toBe(false);
+    expect(useIiotStore.getState().thresholds.R06.pressure?.max).toBe(12);
+  });
+
+  it('setThreshold menolak parameter yang tidak dimiliki ruangan', () => {
+    const store = useIiotStore.getState();
+    expect(store.setThreshold('R01', 'pressure', 1, 5)).toBe(false);
+  });
+});
+
+describe('setDeviceEnabled', () => {
+  it('disable menghentikan emisi & menandai disabled; enable kembali', () => {
+    const store = useIiotStore.getState();
+    store.setDeviceEnabled('NODE-R03-001', false);
+    expect(useIiotStore.getState().devices['NODE-R03-001'].enabled).toBe(false);
+    store.setDeviceEnabled('NODE-R03-001', true);
+    expect(useIiotStore.getState().devices['NODE-R03-001'].enabled).toBe(true);
   });
 });

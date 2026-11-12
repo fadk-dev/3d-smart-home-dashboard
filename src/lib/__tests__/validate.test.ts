@@ -1,92 +1,132 @@
-// Unit test validasi payload & freshness & dedup — SRS §6, FR-15/16/17, AC-12/13, §9.5.
+// Unit test validasi payload IIoT — SRS §6 / FR-02, AC-01/02/03.
 import { describe, expect, it } from 'vitest';
 import {
-  buildLampCommand,
   classifyFreshness,
   isNewerThan,
   parseJson,
-  validateAvailability,
-  validateLampCommand,
-  validateLampState,
   validateTelemetry,
 } from '../validate';
 
-const NOW = 1_794_480_000_000;
-const DEV = 'esp32_01';
+const NOW = 1_794_480_000_000; // 2026-11-12T10:40:00Z
+const ISO = '2026-11-12T10:40:00Z';
 
-function telemetry(over: Record<string, unknown> = {}) {
+function r06(over: Record<string, unknown> = {}) {
   return {
-    schemaVersion: '1.0',
-    deviceId: DEV,
-    ts: NOW,
-    seq: 1024,
-    temperatureC: 28.5,
-    humidityPct: 65.2,
-    pressureHpa: 1008.4,
+    device_id: 'NODE-R06-001',
+    room_id: 'R06',
+    timestamp: ISO,
+    humidity: 62.5,
+    temperature: 27.8,
+    pressure: 5.2,
+    pressure_reference: 'R05',
     ...over,
   };
 }
 
-describe('validateTelemetry', () => {
-  it('menerima payload valid lengkap (contoh SRS §6.4)', () => {
-    const r = validateTelemetry(telemetry(), DEV, NOW);
+function r01(over: Record<string, unknown> = {}) {
+  return {
+    device_id: 'NODE-R01-001',
+    room_id: 'R01',
+    timestamp: ISO,
+    humidity: 60,
+    temperature: 26,
+    ...over,
+  };
+}
+
+describe('validateTelemetry — payload valid', () => {
+  it('menerima R06 lengkap dengan pressure (contoh FR-02)', () => {
+    const r = validateTelemetry(r06(), NOW);
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.value.temperatureC).toBe(28.5);
+    if (r.ok) {
+      expect(r.value.deviceId).toBe('NODE-R06-001');
+      expect(r.value.roomId).toBe('R06');
+      expect(r.value.pressure).toBe(5.2);
+      expect(r.value.pressureReference).toBe('R05');
+      expect(r.value.ts).toBe(Date.parse(ISO));
+    }
   });
 
-  it('menerima payload tanpa field opsional', () => {
-    const { humidityPct: _h, pressureHpa: _p, seq: _s, ...minimal } = telemetry();
-    void _h;
+  it('menerima non-R06 tanpa pressure', () => {
+    expect(validateTelemetry(r01(), NOW).ok).toBe(true);
+  });
+
+  it('pressure null pada R06 diizinkan (sensor ΔP boleh tidak mengirim)', () => {
+    expect(validateTelemetry(r06({ pressure: null }), NOW).ok).toBe(true);
+    expect(validateTelemetry(r06({ pressure: undefined }), NOW).ok).toBe(true);
+    const { pressure: _p, pressure_reference: _r, ...rest } = r06();
     void _p;
-    void _s;
-    expect(validateTelemetry(minimal, DEV, NOW).ok).toBe(true);
-  });
-
-  it('menolak field wajib hilang (temperatureC)', () => {
-    const { temperatureC: _t, ...rest } = telemetry();
-    void _t;
-    const r = validateTelemetry(rest, DEV, NOW);
-    expect(r.ok).toBe(false);
-  });
-
-  it('menolak tipe salah (humidityPct string)', () => {
-    const r = validateTelemetry(telemetry({ humidityPct: '65' }), DEV, NOW);
-    expect(r.ok).toBe(false);
-  });
-
-  it('menolak nilai di luar rentang', () => {
-    expect(validateTelemetry(telemetry({ temperatureC: 100 }), DEV, NOW).ok).toBe(false);
-    expect(validateTelemetry(telemetry({ temperatureC: -20 }), DEV, NOW).ok).toBe(false);
-    expect(validateTelemetry(telemetry({ humidityPct: 150 }), DEV, NOW).ok).toBe(false);
-    expect(validateTelemetry(telemetry({ pressureHpa: 500 }), DEV, NOW).ok).toBe(false);
+    void _r;
+    expect(validateTelemetry(rest, NOW).ok).toBe(true);
   });
 
   it('menerima nilai di batas rentang', () => {
-    expect(validateTelemetry(telemetry({ temperatureC: -10 }), DEV, NOW).ok).toBe(true);
-    expect(validateTelemetry(telemetry({ temperatureC: 60 }), DEV, NOW).ok).toBe(true);
-    expect(validateTelemetry(telemetry({ humidityPct: 0 }), DEV, NOW).ok).toBe(true);
-    expect(validateTelemetry(telemetry({ humidityPct: 100 }), DEV, NOW).ok).toBe(true);
+    expect(validateTelemetry(r01({ humidity: 0, temperature: -30 }), NOW).ok).toBe(true);
+    expect(validateTelemetry(r01({ humidity: 100, temperature: 60 }), NOW).ok).toBe(true);
+    expect(validateTelemetry(r06({ pressure: -50 }), NOW).ok).toBe(true);
+    expect(validateTelemetry(r06({ pressure: 50 }), NOW).ok).toBe(true);
   });
+});
 
-  it('menolak deviceId yang tidak sesuai konteks (FR-16)', () => {
-    const r = validateTelemetry(telemetry({ deviceId: 'esp32_99' }), DEV, NOW);
+describe('validateTelemetry — payload ditolak', () => {
+  it('pressure pada node non-R06 ditolak', () => {
+    const r = validateTelemetry(r01({ pressure: 5.2 }), NOW);
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toContain('esp32_99');
+    if (!r.ok) expect(r.error).toContain('R06');
   });
 
-  it('menolak schemaVersion salah', () => {
-    expect(validateTelemetry(telemetry({ schemaVersion: '2.0' }), DEV, NOW).ok).toBe(false);
+  it('device_id tidak dikenal ditolak', () => {
+    expect(validateTelemetry(r01({ device_id: 'NODE-R99-001' }), NOW).ok).toBe(false);
+    expect(validateTelemetry(r01({ device_id: 'esp32_01' }), NOW).ok).toBe(false);
   });
 
-  it('menolak ts terlalu jauh di masa depan', () => {
-    const r = validateTelemetry(telemetry({ ts: NOW + 10 * 60_000 }), DEV, NOW);
-    expect(r.ok).toBe(false);
+  it('room_id tidak cocok dengan node ditolak', () => {
+    expect(validateTelemetry(r01({ room_id: 'R02' }), NOW).ok).toBe(false);
+    expect(validateTelemetry(r06({ room_id: 'R05' }), NOW).ok).toBe(false);
   });
 
-  it('menolak payload bukan objek', () => {
-    expect(validateTelemetry('bukan objek', DEV, NOW).ok).toBe(false);
-    expect(validateTelemetry(null, DEV, NOW).ok).toBe(false);
-    expect(validateTelemetry([1, 2], DEV, NOW).ok).toBe(false);
+  it('timestamp tidak valid / terlalu jauh di masa depan ditolak', () => {
+    expect(validateTelemetry(r01({ timestamp: 'kemarin' }), NOW).ok).toBe(false);
+    expect(validateTelemetry(r01({ timestamp: 1794480000000 }), NOW).ok).toBe(false);
+    expect(validateTelemetry(r01({ timestamp: '2026-11-12T10:46:00Z' }), NOW).ok).toBe(false);
+    // Tepat 5 menit di masa depan masih diterima (batas toleransi).
+    expect(validateTelemetry(r01({ timestamp: '2026-11-12T10:45:00Z' }), NOW).ok).toBe(true);
+  });
+
+  it('humidity/temperature hilang atau null ditolak (sensor wajib semua node)', () => {
+    const { humidity: _h, ...noHum } = r01();
+    void _h;
+    expect(validateTelemetry(noHum, NOW).ok).toBe(false);
+    expect(validateTelemetry(r01({ humidity: null }), NOW).ok).toBe(false);
+    const { temperature: _t, ...noTemp } = r01();
+    void _t;
+    expect(validateTelemetry(noTemp, NOW).ok).toBe(false);
+    expect(validateTelemetry(r01({ temperature: null }), NOW).ok).toBe(false);
+  });
+
+  it('nilai di luar rentang ditolak', () => {
+    expect(validateTelemetry(r01({ humidity: 101 }), NOW).ok).toBe(false);
+    expect(validateTelemetry(r01({ humidity: -1 }), NOW).ok).toBe(false);
+    expect(validateTelemetry(r01({ temperature: 61 }), NOW).ok).toBe(false);
+    expect(validateTelemetry(r01({ temperature: -31 }), NOW).ok).toBe(false);
+    expect(validateTelemetry(r06({ pressure: 51 }), NOW).ok).toBe(false);
+    expect(validateTelemetry(r06({ pressure: -51 }), NOW).ok).toBe(false);
+  });
+
+  it('tipe salah ditolak', () => {
+    expect(validateTelemetry(r01({ humidity: '60' }), NOW).ok).toBe(false);
+    expect(validateTelemetry(r01({ temperature: '26' }), NOW).ok).toBe(false);
+    expect(validateTelemetry(r06({ pressure: '5.2' }), NOW).ok).toBe(false);
+  });
+
+  it('pressure_reference selain R05 ditolak', () => {
+    expect(validateTelemetry(r06({ pressure_reference: 'R04' }), NOW).ok).toBe(false);
+  });
+
+  it('payload bukan objek ditolak', () => {
+    expect(validateTelemetry('bukan objek', NOW).ok).toBe(false);
+    expect(validateTelemetry(null, NOW).ok).toBe(false);
+    expect(validateTelemetry([1, 2], NOW).ok).toBe(false);
   });
 });
 
@@ -102,86 +142,25 @@ describe('parseJson', () => {
   });
 });
 
-describe('validateLampState', () => {
-  const base = {
-    schemaVersion: '1.0',
-    deviceId: DEV,
-    requestId: 'req-20261112-0001',
-    state: 'ON',
-    ts: NOW,
-    seq: 55,
-  };
-  it('menerima state valid dengan requestId (contoh SRS §6.6)', () => {
-    expect(validateLampState(base, DEV, NOW).ok).toBe(true);
-  });
-  it('menerima state tanpa requestId', () => {
-    const { requestId: _r, ...rest } = base;
-    void _r;
-    expect(validateLampState(rest, DEV, NOW).ok).toBe(true);
-  });
-  it('menolak state di luar enum', () => {
-    expect(validateLampState({ ...base, state: 'TOGGLE' }, DEV, NOW).ok).toBe(false);
-  });
-  it('menolak deviceId lain', () => {
-    expect(validateLampState({ ...base, deviceId: 'esp32_02' }, DEV, NOW).ok).toBe(false);
-  });
-});
-
-describe('validateAvailability', () => {
-  const base = {
-    schemaVersion: '1.0',
-    deviceId: DEV,
-    status: 'online',
-    ts: NOW,
-    reason: 'connected',
-  };
-  it('menerima online/offline', () => {
-    expect(validateAvailability(base, DEV, NOW).ok).toBe(true);
-    expect(validateAvailability({ ...base, status: 'offline' }, DEV, NOW).ok).toBe(true);
-  });
-  it('menolak status lain', () => {
-    expect(validateAvailability({ ...base, status: 'away' }, DEV, NOW).ok).toBe(false);
-  });
-});
-
-describe('buildLampCommand / validateLampCommand', () => {
-  it('membentuk requestId unik format req-<epoch>-<random>', () => {
-    const a = buildLampCommand(DEV, 'ON', NOW);
-    const b = buildLampCommand(DEV, 'ON', NOW);
-    expect(a.requestId).toMatch(/^req-1794480000000-[a-z0-9]+$/);
-    expect(a.requestId).not.toBe(b.requestId);
-    expect(validateLampCommand(a).ok).toBe(true);
-  });
-  it('menolak targetState toggle (harus ON/OFF eksplisit)', () => {
-    const cmd = { ...buildLampCommand(DEV, 'ON', NOW), targetState: 'TOGGLE' };
-    expect(validateLampCommand(cmd).ok).toBe(false);
-  });
-});
-
-describe('classifyFreshness (SRS §9.5)', () => {
-  it('batas 5 detik → CURRENT, 5 detik + 1 ms → STALE', () => {
+describe('classifyFreshness (interval sampling 1 menit)', () => {
+  it('batas 90 detik → CURRENT, 90 detik + 1 ms → STALE', () => {
     expect(classifyFreshness(0)).toBe('CURRENT');
-    expect(classifyFreshness(5000)).toBe('CURRENT');
-    expect(classifyFreshness(5001)).toBe('STALE');
+    expect(classifyFreshness(90_000)).toBe('CURRENT');
+    expect(classifyFreshness(90_001)).toBe('STALE');
   });
-  it('batas 10 detik → STALE, 10 detik + 1 ms → UNAVAILABLE', () => {
-    expect(classifyFreshness(10000)).toBe('STALE');
-    expect(classifyFreshness(10001)).toBe('UNAVAILABLE');
+  it('batas 180 detik → STALE, 180 detik + 1 ms → UNAVAILABLE', () => {
+    expect(classifyFreshness(180_000)).toBe('STALE');
+    expect(classifyFreshness(180_001)).toBe('UNAVAILABLE');
   });
 });
 
-describe('isNewerThan — dedup / out-of-order (FR-17)', () => {
-  it('seq lebih besar diterima, seq sama/lebih kecil ditolak', () => {
-    expect(isNewerThan({ lastSeq: 10, lastTs: NOW }, { seq: 11, ts: NOW + 1 })).toBe(true);
-    expect(isNewerThan({ lastSeq: 10, lastTs: NOW }, { seq: 10, ts: NOW + 1 })).toBe(false);
-    expect(isNewerThan({ lastSeq: 10, lastTs: NOW }, { seq: 9, ts: NOW + 1 })).toBe(false);
-  });
-  it('tanpa seq, ts menentukan; ts sama/lebih lama ditolak', () => {
+describe('isNewerThan — dedup / out-of-order (device_id + timestamp)', () => {
+  it('timestamp lebih baru diterima, sama/lebih lama ditolak', () => {
     expect(isNewerThan({ lastTs: NOW }, { ts: NOW + 1 })).toBe(true);
     expect(isNewerThan({ lastTs: NOW }, { ts: NOW })).toBe(false);
     expect(isNewerThan({ lastTs: NOW }, { ts: NOW - 1 })).toBe(false);
   });
   it('pesan pertama selalu diterima', () => {
-    expect(isNewerThan({}, { seq: 1, ts: NOW })).toBe(true);
+    expect(isNewerThan({}, { ts: NOW })).toBe(true);
   });
 });

@@ -1,9 +1,14 @@
-// Status bar atas — SRS §5.1, UI-07/08, NFR-14.
-// Tiga status yang BERBEDA selalu terlihat: mode aplikasi, koneksi broker,
-// dan availability perangkat (FR-13, AC-09).
+// Status bar atas — SRS IIoT Catering v1.1 FR-04, FR-07.
+// Status yang selalu terlihat: mode aplikasi, koneksi broker, hitungan ruangan
+// (normal / alert / offline), jumlah alert aktif, dan peran UI.
 import { useEffect, useState } from 'react';
-import { effectiveAvailability, useSmartHome } from '../store/useStore';
-import { DEVICES } from '../config/devices';
+import {
+  activeAlertCount,
+  computeRoomStatus,
+  useIiotStore,
+} from '../store/useStore';
+import { ROOMS } from '../config/devices';
+import type { UserRole } from '../config';
 
 function Badge(props: { label: string; tone: 'green' | 'amber' | 'red' | 'grey' | 'blue' }) {
   const colors: Record<string, string> = {
@@ -33,27 +38,27 @@ function Badge(props: { label: string; tone: 'green' | 'amber' | 'red' | 'grey' 
 }
 
 export default function StatusBar(props: { sceneStatus: string }) {
-  const mode = useSmartHome((s) => s.mode);
-  const brokerStatus = useSmartHome((s) => s.brokerStatus);
-  const devices = useSmartHome((s) => s.devices);
+  const mode = useIiotStore((s) => s.mode);
+  const brokerStatus = useIiotStore((s) => s.brokerStatus);
+  const rooms = useIiotStore((s) => s.rooms);
+  const devices = useIiotStore((s) => s.devices);
+  const alerts = useIiotStore((s) => s.alerts);
+  const role = useIiotStore((s) => s.role);
+  const setRole = useIiotStore((s) => s.setRole);
   const [, setNow] = useState(Date.now());
-  // Tick 1 detik agar STALE availability ikut berubah tanpa pesan baru (§4.4).
+  // Tick 5 detik agar status ruangan ikut berubah tanpa pesan baru.
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    const id = setInterval(() => setNow(Date.now()), 5000);
     return () => clearInterval(id);
   }, []);
 
   const now = Date.now();
-  const availabilities = DEVICES.map(
-    (d) => effectiveAvailability(devices[d.deviceId], now),
-  );
-  const onlineCount = availabilities.filter((a) => a === 'ONLINE').length;
-  const anyOffline = availabilities.includes('OFFLINE');
-  const deviceTone = onlineCount === DEVICES.length ? 'green' : anyOffline ? 'red' : 'amber';
-  const deviceLabel =
-    onlineCount === DEVICES.length
-      ? `Perangkat: ${onlineCount}/${DEVICES.length} ONLINE`
-      : `Perangkat: ${onlineCount}/${DEVICES.length} online${anyOffline ? ' • ada OFFLINE' : ' • belum pasti'}`;
+  const statuses = ROOMS.map((r) => computeRoomStatus(r.id, { rooms, devices, alerts }, now));
+  const normalCount = statuses.filter((s) => s === 'NORMAL').length;
+  const warningCount = statuses.filter((s) => s === 'WARNING').length;
+  const offlineCount = statuses.filter((s) => s === 'OFFLINE').length;
+  const noDataCount = statuses.filter((s) => s === 'NO_DATA').length;
+  const activeAlerts = activeAlertCount(alerts);
 
   const brokerTone =
     brokerStatus === 'CONNECTED'
@@ -63,22 +68,39 @@ export default function StatusBar(props: { sceneStatus: string }) {
         : brokerStatus === 'ERROR'
           ? 'red'
           : 'grey';
-  const sceneTone = props.sceneStatus === 'READY' ? 'green' : props.sceneStatus === 'ERROR' ? 'red' : 'amber';
+  const sceneTone =
+    props.sceneStatus === 'READY' ? 'green' : props.sceneStatus === 'ERROR' ? 'red' : 'amber';
+  const roomsTone = offlineCount > 0 ? 'red' : warningCount > 0 ? 'amber' : 'green';
 
   return (
     <header className="statusbar">
       <div className="brand">
-        <span className="brand-mark">⌂</span>
+        <span className="brand-mark">🏭</span>
         <div>
-          <strong>Smart Home 3D</strong>
-          <span className="brand-sub">Denah 10 × 12 m • 1 lantai • ~90 m²</span>
+          <strong>IIoT Catering — Monitoring Rumah Produksi</strong>
+          <span className="brand-sub">Denah 12 × 10 m • 8 ruangan MVP • 9 node sensor • ΔP R06↔R05</span>
         </div>
       </div>
       <div className="badges" role="status" aria-label="Status sistem">
         <Badge label={mode === 'LIVE' ? '● LIVE' : '● SIMULATION'} tone={mode === 'LIVE' ? 'blue' : 'amber'} />
         <Badge label={`Broker: ${brokerStatus}`} tone={brokerTone} />
-        <Badge label={deviceLabel} tone={deviceTone} />
+        <Badge
+          label={`Ruangan: ${normalCount} normal • ${warningCount} alert • ${offlineCount} offline${noDataCount > 0 ? ` • ${noDataCount} tanpa data` : ''}`}
+          tone={roomsTone}
+        />
+        <Badge label={`Alert aktif: ${activeAlerts}`} tone={activeAlerts > 0 ? 'red' : 'green'} />
         <Badge label={`Scene: ${props.sceneStatus}`} tone={sceneTone} />
+        <label className="role-switch">
+          <span>Peran</span>
+          <select
+            value={role}
+            onChange={(e) => setRole(e.target.value as UserRole)}
+            aria-label="Peran pengguna (UI lokal, tanpa autentikasi)"
+          >
+            <option value="ADMIN">Administrator</option>
+            <option value="OPERATOR">Operator Produksi</option>
+          </select>
+        </label>
       </div>
     </header>
   );
