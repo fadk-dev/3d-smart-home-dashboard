@@ -6,7 +6,10 @@ sesuai SRS v1.1 (`SRS — Sistem Monitoring IIoT Rumah Produksi Makanan
 
 - Scene 3D dollhouse prosedural (tanpa atap) denah 12,0 m × 10,0 m, tinggi
   plafon 3,0 m, utara = −Z — dari gambar denah rumah produksi makanan
-  (higiene sanitasi, skala 1:100).
+  (higiene sanitasi, skala 1:100). Tembok 3D dibuat rendah (default 1,2 m)
+  dan semi-transparan (opasitas 45%) agar isi ruangan terlihat; tinggi tembok
+  (0,6–3,0 m), opasitas, dan visibilitas label marker bisa diatur di panel
+  "Pengaturan tampilan" di bawah scene.
 - **8 ruangan MVP** (AC-13) dengan **9 node sensor** independen: R01 Penerimaan
   Bahan Baku, R02 Gudang Bahan Kering, R03 Chiller/Freezer, R04 Cuci dan Sortir
   Bahan, R05 Dapur Produksi/Memasak, R06 Porsi dan Pengemasan (satu-satunya

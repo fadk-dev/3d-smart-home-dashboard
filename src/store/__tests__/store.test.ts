@@ -260,3 +260,24 @@ describe('setDeviceEnabled', () => {
     expect(useIiotStore.getState().devices['NODE-R03-001'].enabled).toBe(true);
   });
 });
+
+describe('pengaturan tampilan scene', () => {
+  it('default: tembok rendah 1,2 m, semi-transparan 45%, label tampil', () => {
+    const { scene } = useIiotStore.getState();
+    expect(scene.wallHeight).toBe(1.2);
+    expect(scene.wallOpacity).toBe(0.45);
+    expect(scene.showLabels).toBe(true);
+  });
+
+  it('setScene mengubah tinggi/opasitas tembok & visibilitas label', () => {
+    const store = useIiotStore.getState();
+    store.setScene({ wallHeight: 2.0, wallOpacity: 0.8, showLabels: false });
+    const { scene } = useIiotStore.getState();
+    expect(scene.wallHeight).toBe(2.0);
+    expect(scene.wallOpacity).toBe(0.8);
+    expect(scene.showLabels).toBe(false);
+    // Pengaturan lain tidak ikut berubah.
+    expect(scene.autoRotate).toBe(false);
+    store.setScene({ wallHeight: 1.2, wallOpacity: 0.45, showLabels: true });
+  });
+});

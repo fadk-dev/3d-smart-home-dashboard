@@ -123,6 +123,40 @@ export default function App() {
                     Bayangan
                   </label>
                   <label>
+                    <input
+                      type="checkbox"
+                      checked={scene.showLabels}
+                      onChange={(e) => setScene({ showLabels: e.target.checked })}
+                    />
+                    Tampilkan label
+                  </label>
+                  <label>
+                    Tinggi tembok
+                    <input
+                      type="range"
+                      min={0.6}
+                      max={3.0}
+                      step={0.1}
+                      value={scene.wallHeight}
+                      onChange={(e) => setScene({ wallHeight: Number(e.target.value) })}
+                      aria-label="Tinggi tembok (meter)"
+                    />
+                    <span className="slider-val">{scene.wallHeight.toFixed(1)} m</span>
+                  </label>
+                  <label>
+                    Opasitas tembok
+                    <input
+                      type="range"
+                      min={0.1}
+                      max={1}
+                      step={0.05}
+                      value={scene.wallOpacity}
+                      onChange={(e) => setScene({ wallOpacity: Number(e.target.value) })}
+                      aria-label="Opasitas tembok"
+                    />
+                    <span className="slider-val">{Math.round(scene.wallOpacity * 100)}%</span>
+                  </label>
+                  <label>
                     Kualitas
                     <select
                       value={scene.quality}

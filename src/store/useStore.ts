@@ -102,6 +102,12 @@ export interface SceneSettings {
   autoRotate: boolean;
   shadows: boolean;
   quality: 'low' | 'high';
+  /** Tinggi tembok 3D (m) — default rendah 1,2 m gaya dollhouse agar isi ruangan terlihat. */
+  wallHeight: number;
+  /** Opasitas tembok 3D (0,1–1) — default 0,45 semi-transparan. */
+  wallOpacity: number;
+  /** Tampilkan/sembunyikan semua label marker (nama ruangan, ID node, penanda utara). */
+  showLabels: boolean;
 }
 
 export type RoomStatus = 'NORMAL' | 'WARNING' | 'OFFLINE' | 'NO_DATA';
@@ -226,7 +232,7 @@ export const useIiotStore = create<IiotState>()((set, get) => ({
   alerts: [],
   events: [],
   invalidThrottle: {},
-  scene: { autoRotate: false, shadows: true, quality: 'high' },
+  scene: { autoRotate: false, shadows: true, quality: 'high', wallHeight: 1.2, wallOpacity: 0.45, showLabels: true },
   selectedRoomId: 'R01',
   dbReady: false,
 

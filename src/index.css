@@ -82,6 +82,8 @@ body { margin: 0; }
 .scene-settings legend { font-size: 11px; color: var(--muted); padding: 0 4px; }
 .scene-settings label { display: flex; gap: 5px; align-items: center; cursor: pointer; }
 .scene-settings select { margin-left: 5px; }
+.scene-settings input[type='range'] { width: 90px; accent-color: var(--accent, #b45309); }
+.scene-settings .slider-val { min-width: 44px; font-variant-numeric: tabular-nums; color: var(--muted); }
 
 .sidebar {
   width: 400px; flex-shrink: 0; overflow-y: auto; padding: 0 0 0 12px;
