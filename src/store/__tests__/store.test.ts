@@ -266,12 +266,13 @@ describe('setDeviceEnabled', () => {
 });
 
 describe('pengaturan tampilan scene', () => {
-  it('default: tembok rendah 1,2 m, semi-transparan 45%, label & perabot tampil', () => {
+  it('default: tembok rendah 1,2 m, semi-transparan 45%, label & perabot & sumbu XYZ tampil', () => {
     const { scene } = useIiotStore.getState();
     expect(scene.wallHeight).toBe(1.2);
     expect(scene.wallOpacity).toBe(0.45);
     expect(scene.showLabels).toBe(true);
     expect(scene.showFurniture).toBe(true);
+    expect(scene.showAxes).toBe(true);
   });
 
   it('default visualisasi: mode status, skala suhu −20..40 °C, kelembapan 0..100 %RH', () => {

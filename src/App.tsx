@@ -155,6 +155,14 @@ export default function App() {
                       Tampilkan perabot
                     </label>
                     <label>
+                      <input
+                        type="checkbox"
+                        checked={scene.showAxes}
+                        onChange={(e) => setScene({ showAxes: e.target.checked })}
+                      />
+                      Tampilkan sumbu XYZ
+                    </label>
+                    <label>
                       Tinggi tembok
                       <input
                         type="range"
@@ -209,7 +217,8 @@ export default function App() {
             </div>
             <div className="overlay overlay-hint canvas-hint">
               Seret untuk rotate • Klik kanan seret untuk pan • Scroll untuk zoom • Klik
-              ruangan atau beacon sensor untuk memilih
+              ruangan atau beacon sensor untuk memilih • Klik ujung sumbu XYZ di kanan
+              atas untuk quick view (X = samping, Y = atas, Z = depan)
             </div>
           </div>
         )}

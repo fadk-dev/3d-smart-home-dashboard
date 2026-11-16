@@ -28,6 +28,11 @@ sesuai SRS v1.1 (`SRS — Sistem Monitoring IIoT Rumah Produksi Makanan
   perabot" — mematikan rak, meja, kompor, chiller, palet, loker, dll agar
   lantai dan warna visualisasi terlihat bersih; **beacon sensor tidak ikut
   disembunyikan** dan tetap tampil di tiap ruangan.
+- **Widget sumbu XYZ (quick view 3D)**: di kanan atas scene ada widget sumbu
+  X (merah) / Y (hijau) / Z (biru) yang **sinkron dengan orientasi kamera** —
+  klik ujung sumbu untuk melompat ke tampilan sepanjang sumbu itu (X = samping,
+  Y = atas, Z = depan). Bisa disembunyikan lewat checkbox "Tampilkan sumbu XYZ"
+  di panel "Pengaturan tampilan".
 - **Penanda pada grafik**: grafik histori ruangan terpilih selalu menandai nilai
   terakhir parameter yang aktif dengan titik + label nilai (suhu = merah,
   kelembapan = biru, ΔP = cokelat), plus garis putus-putus min/maks threshold.

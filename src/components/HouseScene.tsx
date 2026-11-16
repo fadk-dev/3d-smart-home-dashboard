@@ -10,8 +10,8 @@
 // Klik lantai ruangan atau beacon sensor untuk memilih ruangan.
 import { Component, Suspense, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { Html, OrbitControls } from '@react-three/drei';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { GizmoHelper, GizmoViewport, Html, OrbitControls } from '@react-three/drei';
 import type { ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { computeRoomStatus, effectiveDeviceStatus, useIiotStore } from '../store/useStore';
@@ -470,6 +470,27 @@ class SceneErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
   }
 }
 
+/** Widget sumbu XYZ (quick view 3D) di kanan atas scene — sumbu yang sinkron
+ *  dengan orientasi kamera. Klik ujung sumbu untuk melompat ke tampilan
+ *  sepanjang sumbu itu (X = samping, Y = atas, Z = depan). Di layar lebar
+ *  digeser ke kiri agar tidak tertutup panel overlay kanan; di layar sempit
+ *  menempel pojok kanan atas canvas. */
+function AxesGizmo() {
+  const showAxes = useIiotStore((s) => s.scene.showAxes);
+  const width = useThree((s) => s.size.width);
+  if (!showAxes) return null;
+  const wide = width > 1100;
+  return (
+    <GizmoHelper alignment="top-right" margin={wide ? [480, 120] : [90, 90]}>
+      <GizmoViewport
+        axisColors={['#dc2626', '#16a34a', '#2563eb']}
+        labels={['X', 'Y', 'Z']}
+        labelColor="#1f2937"
+      />
+    </GizmoHelper>
+  );
+}
+
 export default function HouseScene(props: { onReady: () => void }) {
   const rooms = useIiotStore((s) => s.rooms);
   const devices = useIiotStore((s) => s.devices);
@@ -545,6 +566,9 @@ export default function HouseScene(props: { onReady: () => void }) {
             maxDistance={32}
             target={[0, 0, 0]}
           />
+
+          {/* Widget sumbu XYZ (quick view) — sinkron dengan kamera */}
+          <AxesGizmo />
 
           {/* Halaman (tanah) di sekeliling bangunan */}
           <Box position={[0, -0.26, 0]} size={[30, 0.04, 30]} color="#c9c9c4" />
