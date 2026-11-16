@@ -269,6 +269,15 @@ describe('pengaturan tampilan scene', () => {
     expect(scene.showLabels).toBe(true);
   });
 
+  it('default visualisasi: mode status, skala suhu −20..40 °C, kelembapan 0..100 %RH', () => {
+    const { scene } = useIiotStore.getState();
+    expect(scene.vizMode).toBe('status');
+    expect(scene.tempMin).toBe(-20);
+    expect(scene.tempMax).toBe(40);
+    expect(scene.humMin).toBe(0);
+    expect(scene.humMax).toBe(100);
+  });
+
   it('setScene mengubah tinggi/opasitas tembok & visibilitas label', () => {
     const store = useIiotStore.getState();
     store.setScene({ wallHeight: 2.0, wallOpacity: 0.8, showLabels: false });

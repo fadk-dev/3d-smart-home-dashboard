@@ -36,6 +36,8 @@ import {
   offlineAlertKey,
 } from '../mqtt/commandService';
 import type { AlertType } from '../mqtt/commandService';
+import type { VizMode } from '../lib/colorScale';
+import { DEFAULT_HUM_SCALE, DEFAULT_TEMP_SCALE } from '../lib/colorScale';
 
 export interface HistoryPoint {
   t: number;
@@ -108,6 +110,14 @@ export interface SceneSettings {
   wallOpacity: number;
   /** Tampilkan/sembunyikan semua label marker (nama ruangan, ID node, penanda utara). */
   showLabels: boolean;
+  /** Mode pewarnaan lantai ruangan di scene 3D. */
+  vizMode: VizMode;
+  /** Rentang skala warna suhu (°C) — nilai di luar rentang dijepit ke ujung. */
+  tempMin: number;
+  tempMax: number;
+  /** Rentang skala warna kelembapan (%RH). */
+  humMin: number;
+  humMax: number;
 }
 
 export type RoomStatus = 'NORMAL' | 'WARNING' | 'OFFLINE' | 'NO_DATA';
@@ -232,7 +242,19 @@ export const useIiotStore = create<IiotState>()((set, get) => ({
   alerts: [],
   events: [],
   invalidThrottle: {},
-  scene: { autoRotate: false, shadows: true, quality: 'high', wallHeight: 1.2, wallOpacity: 0.45, showLabels: true },
+  scene: {
+    autoRotate: false,
+    shadows: true,
+    quality: 'high',
+    wallHeight: 1.2,
+    wallOpacity: 0.45,
+    showLabels: true,
+    vizMode: 'status',
+    tempMin: DEFAULT_TEMP_SCALE.min,
+    tempMax: DEFAULT_TEMP_SCALE.max,
+    humMin: DEFAULT_HUM_SCALE.min,
+    humMax: DEFAULT_HUM_SCALE.max,
+  },
   selectedRoomId: 'R01',
   dbReady: false,
 

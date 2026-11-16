@@ -14,6 +14,7 @@ import ConnectionPanel from './components/ConnectionPanel';
 import ThresholdPanel from './components/ThresholdPanel';
 import AlertsPanel from './components/AlertsPanel';
 import HistoryPanel from './components/HistoryPanel';
+import VizFilterPanel from './components/VizFilterPanel';
 import RoomCards, { FlowStrip } from './components/RoomCards';
 import { activeAlertCount, useIiotStore } from './store/useStore';
 import { mqttService } from './mqtt/client';
@@ -176,6 +177,7 @@ export default function App() {
                 <EventLog />
               </aside>
             </div>
+            <VizFilterPanel />
             <RoomCards />
           </>
         )}

@@ -16,6 +16,7 @@ import type { ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { computeRoomStatus, effectiveDeviceStatus, useIiotStore } from '../store/useStore';
 import type { RoomStatus } from '../store/useStore';
+import { humidityColor, temperatureColor } from '../lib/colorScale';
 import { NODES, NON_MVP_ROOMS, ROOMS } from '../config/devices';
 import type { RoomConfig } from '../config/devices';
 
@@ -137,20 +138,19 @@ function RoomLabel(props: { x: number; z: number; children: ReactNode; grey?: bo
   );
 }
 
-/** Lantai satu persegi ruangan (status → warna; offline → denyut merah). */
-function RoomFloorMesh(props: {
-  rect: [number, number, number, number];
+/** Satu pelat lantai (penuh, atau separuh bila mode 'both'). */
+function FloorSlab(props: {
+  cx: number;
+  cz: number;
+  w: number;
+  d: number;
+  color: string;
   status: RoomStatus;
   selected: boolean;
   onSelect: () => void;
 }) {
-  const [x0, z0, x1, z1] = props.rect;
-  const w = x1 - x0;
-  const d = z1 - z0;
-  const cx = (x0 + x1) / 2 - 6;
-  const cz = (z0 + z1) / 2 - 5;
   const matRef = useRef<THREE.MeshStandardMaterial>(null);
-  const color = FLOOR_COLOR[props.status];
+  const color = props.color;
   useFrame(({ clock }) => {
     const m = matRef.current;
     if (!m) return;
@@ -163,25 +163,82 @@ function RoomFloorMesh(props: {
     }
   });
   return (
+    <mesh
+      position={[props.cx, 0.02, props.cz]}
+      receiveShadow
+      onClick={(e: ThreeEvent<MouseEvent>) => {
+        e.stopPropagation();
+        props.onSelect();
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        document.body.style.cursor = 'pointer';
+      }}
+      onPointerOut={() => {
+        document.body.style.cursor = 'auto';
+      }}
+    >
+      <boxGeometry args={[props.w, 0.04, props.d]} />
+      <meshStandardMaterial ref={matRef} color={color} roughness={0.95} />
+    </mesh>
+  );
+}
+
+/** Lantai satu persegi ruangan.
+ *  `colors`: 1 warna (mode status/suhu/kelembapan) atau 2 warna
+ *  (mode 'both': separuh barat = suhu, separuh timur = kelembapan). */
+function RoomFloorMesh(props: {
+  rect: [number, number, number, number];
+  status: RoomStatus;
+  colors: string[];
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const [x0, z0, x1, z1] = props.rect;
+  const w = x1 - x0;
+  const d = z1 - z0;
+  const cx = (x0 + x1) / 2 - 6;
+  const cz = (z0 + z1) / 2 - 5;
+  const halves = props.colors.length > 1;
+  return (
     <group>
-      <mesh
-        position={[cx, 0.02, cz]}
-        receiveShadow
-        onClick={(e: ThreeEvent<MouseEvent>) => {
-          e.stopPropagation();
-          props.onSelect();
-        }}
-        onPointerOver={(e) => {
-          e.stopPropagation();
-          document.body.style.cursor = 'pointer';
-        }}
-        onPointerOut={() => {
-          document.body.style.cursor = 'auto';
-        }}
-      >
-        <boxGeometry args={[w, 0.04, d]} />
-        <meshStandardMaterial ref={matRef} color={color} roughness={0.95} />
-      </mesh>
+      {halves ? (
+        <>
+          <FloorSlab
+            cx={cx - w / 4}
+            cz={cz}
+            w={w / 2}
+            d={d}
+            color={props.colors[0]}
+            status={props.status}
+            selected={props.selected}
+            onSelect={props.onSelect}
+          />
+          <FloorSlab
+            cx={cx + w / 4}
+            cz={cz}
+            w={w / 2}
+            d={d}
+            color={props.colors[1]}
+            status={props.status}
+            selected={props.selected}
+            onSelect={props.onSelect}
+          />
+          {/* Garis pemisah antara sisi suhu dan kelembapan */}
+          <Box position={[cx, 0.05, cz]} size={[0.04, 0.02, d]} color="#78716c" />
+        </>
+      ) : (
+        <FloorSlab
+          cx={cx}
+          cz={cz}
+          w={w}
+          d={d}
+          color={props.colors[0]}
+          status={props.status}
+          selected={props.selected}
+          onSelect={props.onSelect}
+        />
+      )}
       {props.selected && (
         <group>
           <Box position={[cx, 0.05, z0 - 5]} size={[w, 0.02, 0.1]} color="#b45309" />
@@ -425,6 +482,11 @@ export default function HouseScene(props: { onReady: () => void }) {
   const wallHeight = useIiotStore((s) => s.scene.wallHeight);
   const wallOpacity = useIiotStore((s) => s.scene.wallOpacity);
   const showLabels = useIiotStore((s) => s.scene.showLabels);
+  const vizMode = useIiotStore((s) => s.scene.vizMode);
+  const tempMin = useIiotStore((s) => s.scene.tempMin);
+  const tempMax = useIiotStore((s) => s.scene.tempMax);
+  const humMin = useIiotStore((s) => s.scene.humMin);
+  const humMax = useIiotStore((s) => s.scene.humMax);
   const [, setNow] = useState(Date.now());
   // Tick 5 detik agar status STALE/OFFLINE ikut berubah tanpa pesan baru.
   useEffect(() => {
@@ -435,6 +497,22 @@ export default function HouseScene(props: { onReady: () => void }) {
   const now = Date.now();
   const roomStatus = (room: RoomConfig): RoomStatus =>
     computeRoomStatus(room.id, { rooms, devices, alerts }, now);
+
+  /** Warna lantai menurut mode visualisasi. Offline selalu merah berdenyut
+   *  (alert harus tetap terlihat); tanpa data → abu-abu. Mode 'both'
+   *  mengembalikan [warna suhu, warna kelembapan]. */
+  const roomVizColors = (room: RoomConfig): string[] => {
+    const status = roomStatus(room);
+    if (status === 'OFFLINE') return [FLOOR_COLOR.OFFLINE];
+    if (vizMode === 'status') return [FLOOR_COLOR[status]];
+    const latest = rooms[room.id]?.latest;
+    if (!latest) return [FLOOR_COLOR.NO_DATA];
+    const t = temperatureColor(latest.temperature, tempMin, tempMax) ?? FLOOR_COLOR.NO_DATA;
+    const h = humidityColor(latest.humidity, humMin, humMax) ?? FLOOR_COLOR.NO_DATA;
+    if (vizMode === 'temperature') return [t];
+    if (vizMode === 'humidity') return [h];
+    return [t, h];
+  };
 
   return (
     <SceneErrorBoundary>
@@ -477,6 +555,7 @@ export default function HouseScene(props: { onReady: () => void }) {
           {ROOMS.map((room) => {
             const status = roomStatus(room);
             const selected = selectedRoomId === room.id;
+            const colors = roomVizColors(room);
             return (
               <group key={room.id}>
                 {room.rects.map((rect, i) => (
@@ -484,6 +563,7 @@ export default function HouseScene(props: { onReady: () => void }) {
                     key={i}
                     rect={rect}
                     status={status}
+                    colors={colors}
                     selected={selected}
                     onSelect={() => setSelected(room.id)}
                   />

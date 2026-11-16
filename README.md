@@ -10,6 +10,12 @@ sesuai SRS v1.1 (`SRS — Sistem Monitoring IIoT Rumah Produksi Makanan
   dan semi-transparan (opasitas 45%) agar isi ruangan terlihat; tinggi tembok
   (0,6–3,0 m), opasitas, dan visibilitas label marker bisa diatur di panel
   "Pengaturan tampilan" di bawah scene.
+- **Filter Visualisasi 3D**: lantai tiap ruangan bisa diwarnai menurut nilai
+  sensor — mode Status, Suhu (biru dingin → merah panas, skala default
+  −20..40 °C), Kelembapan (pucat kering → biru tua lembap, skala default
+  0..100 %RH), atau Keduanya (separuh lantai suhu + separuh kelembapan).
+  Rentang skala bisa diubah dan ada tombol Reset; ruangan offline tetap merah
+  berdenyut dan ruangan tanpa data tetap abu-abu di semua mode.
 - **8 ruangan MVP** (AC-13) dengan **9 node sensor** independen: R01 Penerimaan
   Bahan Baku, R02 Gudang Bahan Kering, R03 Chiller/Freezer, R04 Cuci dan Sortir
   Bahan, R05 Dapur Produksi/Memasak, R06 Porsi dan Pengemasan (satu-satunya
