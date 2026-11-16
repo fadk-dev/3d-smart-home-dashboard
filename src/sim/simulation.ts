@@ -37,8 +37,8 @@ export const SIM_BASELINES: Record<string, SimBaselines> = {
   'NODE-R04-001': { humidity: 78, temperature: 26, pressure: null, humSwing: 6, tempSwing: 2, pressSwing: 0 },
   'NODE-R05-001': { humidity: 62, temperature: 33, pressure: null, humSwing: 7, tempSwing: 3, pressSwing: 0 },
   'NODE-R06-001': { humidity: 60, temperature: 23.5, pressure: 8, humSwing: 5, tempSwing: 1.5, pressSwing: 3 },
-  'NODE-R07-001': { humidity: 55, temperature: 12, pressure: null, humSwing: 5, tempSwing: 3, pressSwing: 0 },
-  'NODE-R07-002': { humidity: 55, temperature: 12, pressure: null, humSwing: 5, tempSwing: 3, pressSwing: 0 },
+  'NODE-R07A-001': { humidity: 55, temperature: 12, pressure: null, humSwing: 5, tempSwing: 3, pressSwing: 0 },
+  'NODE-R07B-001': { humidity: 55, temperature: 12, pressure: null, humSwing: 5, tempSwing: 3, pressSwing: 0 },
   'NODE-R08-001': { humidity: 60, temperature: 27, pressure: null, humSwing: 5, tempSwing: 2, pressSwing: 0 },
 };
 

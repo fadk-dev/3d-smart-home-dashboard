@@ -1,6 +1,6 @@
 // Panel telemetri ruangan terpilih — SRS §3.1, FR-04.
 // Nilai besar + freshness + grafik histori Recharts (pemilih parameter) +
-// daftar node ruangan (R07 punya 2 node) + rentang threshold.
+// daftar node ruangan + rentang threshold.
 // Nilai yang belum tersedia tampil "--", bukan 0.
 import { useEffect, useState } from 'react';
 import {

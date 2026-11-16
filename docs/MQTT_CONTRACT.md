@@ -20,8 +20,8 @@ iiot/catering/R03/NODE-R03-001/telemetry
 iiot/catering/R04/NODE-R04-001/telemetry
 iiot/catering/R05/NODE-R05-001/telemetry
 iiot/catering/R06/NODE-R06-001/telemetry
-iiot/catering/R07/NODE-R07-001/telemetry
-iiot/catering/R07/NODE-R07-002/telemetry
+iiot/catering/R07A/NODE-R07A-001/telemetry
+iiot/catering/R07B/NODE-R07B-001/telemetry
 iiot/catering/R08/NODE-R08-001/telemetry
 ```
 

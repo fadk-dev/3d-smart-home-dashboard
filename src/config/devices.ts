@@ -5,10 +5,12 @@
 // timur), z 0–10 (utara→selatan). Layout disederhanakan dari gambar denah
 // (denah rumah produksi makanan — higiene sanitasi, skala 1:100).
 //
-// MVP HANYA 8 ruangan (AC-13): R01–R08. Dua ruangan denah berlabel
-// "Gudang Produk Jadi" (barat-tengah dan selatan-tengah) keduanya masuk R07,
-// sehingga R07 punya DUA node: NODE-R07-001 dan NODE-R07-002. Total 9 node.
-// Ruangan lain digambar di 3D tapi NON-MONITORING (di luar MVP).
+// MVP HANYA 9 ruangan (AC-13): R01–R06, R07A, R07B, R08. Denah punya DUA
+// ruangan berlabel "Gudang Produk Jadi" (barat-tengah dan selatan-tengah) —
+// keduanya ruangan mandiri dengan sensor sendiri: R07A = barat-tengah
+// (NODE-R07A-001), R07B = selatan-tengah (NODE-R07B-001). Total 9 node,
+// satu node per ruangan. Ruangan lain digambar di 3D tapi NON-MONITORING
+// (di luar MVP).
 import type { Parameter, RoomId } from '../config';
 
 export interface RoomConfig {
@@ -71,14 +73,19 @@ export const ROOMS: RoomConfig[] = [
     hasPressure: true,
   },
   {
-    id: 'R07',
-    name: 'Gudang Produk Jadi',
-    description: 'Finished goods — dua ruangan di denah (barat-tengah & selatan-tengah)',
-    rects: [
-      [0, 2.5, 2.5, 5.5],
-      [4, 5.5, 7, 8],
-    ],
-    location: 'Barat-tengah & selatan-tengah (2 node)',
+    id: 'R07A',
+    name: 'Gudang Produk Jadi (Barat)',
+    description: 'Finished goods — ruangan barat-tengah',
+    rects: [[0, 2.5, 2.5, 5.5]],
+    location: 'Barat-tengah',
+    hasPressure: false,
+  },
+  {
+    id: 'R07B',
+    name: 'Gudang Produk Jadi (Selatan)',
+    description: 'Finished goods — ruangan selatan-tengah',
+    rects: [[4, 5.5, 7, 8]],
+    location: 'Selatan-tengah',
     hasPressure: false,
   },
   {
@@ -92,7 +99,7 @@ export const ROOMS: RoomConfig[] = [
 ];
 
 /** Alur produksi (SRS §3.2). */
-export const FLOW: RoomId[] = ['R01', 'R02', 'R03', 'R04', 'R05', 'R06', 'R07', 'R08'];
+export const FLOW: RoomId[] = ['R01', 'R02', 'R03', 'R04', 'R05', 'R06', 'R07A', 'R07B', 'R08'];
 
 export interface NodeConfig {
   deviceId: string;
@@ -139,14 +146,14 @@ export const NODES: NodeConfig[] = [
     sensors: ['humidity', 'temperature', 'pressure'],
   },
   {
-    deviceId: 'NODE-R07-001',
-    roomId: 'R07',
+    deviceId: 'NODE-R07A-001',
+    roomId: 'R07A',
     location: 'Gudang Produk Jadi barat (tengah-barat)',
     sensors: ['humidity', 'temperature'],
   },
   {
-    deviceId: 'NODE-R07-002',
-    roomId: 'R07',
+    deviceId: 'NODE-R07B-001',
+    roomId: 'R07B',
     location: 'Gudang Produk Jadi selatan (tengah-selatan)',
     sensors: ['humidity', 'temperature'],
   },
@@ -214,7 +221,11 @@ export const DEFAULT_THRESHOLDS: Record<RoomId, ThresholdSet> = {
     temperature: { min: 18, max: 26, unit: '°C' },
     pressure: { min: 2.5, max: 15, unit: 'Pa' },
   },
-  R07: {
+  R07A: {
+    humidity: { min: 40, max: 65, unit: '%RH' },
+    temperature: { min: 4, max: 26, unit: '°C' },
+  },
+  R07B: {
     humidity: { min: 40, max: 65, unit: '%RH' },
     temperature: { min: 4, max: 26, unit: '°C' },
   },

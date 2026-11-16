@@ -51,7 +51,7 @@ export type DeviceStatus = 'ONLINE' | 'OFFLINE' | 'DISABLED' | 'STALE';
 export type Freshness = 'CURRENT' | 'STALE' | 'UNAVAILABLE';
 export type Parameter = 'humidity' | 'temperature' | 'pressure';
 export type UserRole = 'ADMIN' | 'OPERATOR';
-export type RoomId = 'R01' | 'R02' | 'R03' | 'R04' | 'R05' | 'R06' | 'R07' | 'R08';
+export type RoomId = 'R01' | 'R02' | 'R03' | 'R04' | 'R05' | 'R06' | 'R07A' | 'R07B' | 'R08';
 export type AlertStatus = 'Active' | 'Acknowledged' | 'Resolved';
 
 export const PARAMETER_META: Record<Parameter, { label: string; unit: string }> = {

@@ -99,16 +99,20 @@ describe('applyTelemetry', () => {
     expect(useIiotStore.getState().rooms.R06.latest).toBeNull();
   });
 
-  it('dua node R07 menulis ke ruangan yang sama', () => {
+  it('R07A dan R07B adalah ruangan terpisah, masing-masing satu node', () => {
     const store = useIiotStore.getState();
-    store.applyTelemetry(payload({ deviceId: 'NODE-R07-001', roomId: 'R07', pressure: null }), NOW);
+    store.applyTelemetry(payload({ deviceId: 'NODE-R07A-001', roomId: 'R07A', pressure: null }), NOW);
     store.applyTelemetry(
-      payload({ deviceId: 'NODE-R07-002', roomId: 'R07', pressure: null, ts: NOW + 5000, temperature: 14 }),
+      payload({ deviceId: 'NODE-R07B-001', roomId: 'R07B', pressure: null, ts: NOW + 5000, temperature: 14 }),
       NOW + 5000,
     );
-    const room = useIiotStore.getState().rooms.R07;
-    expect(room.history.length).toBe(2);
-    expect(room.latestDeviceId).toBe('NODE-R07-002');
+    const a = useIiotStore.getState().rooms.R07A;
+    const b = useIiotStore.getState().rooms.R07B;
+    expect(a.history.length).toBe(1);
+    expect(a.latestDeviceId).toBe('NODE-R07A-001');
+    expect(b.history.length).toBe(1);
+    expect(b.latestDeviceId).toBe('NODE-R07B-001');
+    expect(b.latest?.temperature).toBe(14);
   });
 });
 

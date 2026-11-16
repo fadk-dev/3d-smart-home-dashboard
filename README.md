@@ -29,14 +29,15 @@ sesuai SRS v1.1 (`SRS — Sistem Monitoring IIoT Rumah Produksi Makanan
   kelembapan = biru, ΔP = cokelat), plus garis putus-putus min/maks threshold.
   Parameter grafik mengikuti mode visualisasi saat ruangan dipilih (mode Suhu
   → grafik suhu, mode Kelembapan → grafik kelembapan).
-- **8 ruangan MVP** (AC-13) dengan **9 node sensor** independen: R01 Penerimaan
-  Bahan Baku, R02 Gudang Bahan Kering, R03 Chiller/Freezer, R04 Cuci dan Sortir
-  Bahan, R05 Dapur Produksi/Memasak, R06 Porsi dan Pengemasan (satu-satunya
-  dengan sensor ΔP vs R05), R07 Gudang Produk Jadi (**2 node**: barat-tengah &
-  selatan-tengah — denah punya dua ruangan Gudang Produk Jadi), R08 Area
-  Pengiriman. Ruangan lain (Kantor/Admin, Toilet, Ruang Ganti & Loker, Janitor,
-  Ruang Sampah, Pencucian Alat, Airlock 1/2/3) digambar abu-abu berlabel
-  "di luar MVP" — tanpa sensor, tanpa bacaan.
+- **9 ruangan MVP** (AC-13) dengan **9 node sensor** independen — satu node per
+  ruangan: R01 Penerimaan Bahan Baku, R02 Gudang Bahan Kering, R03
+  Chiller/Freezer, R04 Cuci dan Sortir Bahan, R05 Dapur Produksi/Memasak, R06
+  Porsi dan Pengemasan (satu-satunya dengan sensor ΔP vs R05), R07A Gudang
+  Produk Jadi (Barat), R07B Gudang Produk Jadi (Selatan) — denah punya dua
+  ruangan Gudang Produk Jadi, masing-masing ruangan mandiri dengan sensor
+  sendiri — R08 Area Pengiriman. Ruangan lain (Kantor/Admin, Toilet, Ruang
+  Ganti & Loker, Janitor, Ruang Sampah, Pencucian Alat, Airlock 1/2/3)
+  digambar abu-abu berlabel "di luar MVP" — tanpa sensor, tanpa bacaan.
 - Parameter: Humidity (%RH), Temperature (°C), Differential Pressure (Pa,
   ΔP = P_R06 − P_R05).
 - Alert: Humidity/Temperature/Pressure High/Low, Device Offline, Invalid Sensor
@@ -116,7 +117,7 @@ Topik lengkap dan aturan validasi ada di `docs/MQTT_CONTRACT.md`. Perangkat
 ESP32 asli cukup memublikasikan topik yang sama — tidak ada firmware di repo
 ini (di luar cakupan MVP).
 
-## Perangkat (9 node / 8 ruangan)
+## Perangkat (9 node / 9 ruangan)
 
 | Ruangan | Node | Sensor |
 |---|---|---|
@@ -126,12 +127,19 @@ ini (di luar cakupan MVP).
 | R04 Cuci dan Sortir Bahan | `NODE-R04-001` | Hum, Temp |
 | R05 Dapur Produksi / Memasak | `NODE-R05-001` | Hum, Temp |
 | R06 Porsi dan Pengemasan | `NODE-R06-001` | Hum, Temp, **Press (ΔP vs R05)** |
-| R07 Gudang Produk Jadi (barat) | `NODE-R07-001` | Hum, Temp |
-| R07 Gudang Produk Jadi (selatan) | `NODE-R07-002` | Hum, Temp |
+| R07A Gudang Produk Jadi (Barat) | `NODE-R07A-001` | Hum, Temp |
+| R07B Gudang Produk Jadi (Selatan) | `NODE-R07B-001` | Hum, Temp |
 | R08 Area Pengiriman | `NODE-R08-001` | Hum, Temp |
 
 Menambah node baru cukup satu entri di `src/config/devices.ts` — tidak ada
 perubahan konsep state.
+
+Catatan migrasi (2026-11-16): sebelumnya kedua ruangan Gudang Produk Jadi
+digabung dalam satu ruangan R07 (node `NODE-R07-001`/`NODE-R07-002`). Sejak
+pemecahan menjadi R07A/R07B, data lokal lama berlabel R07 (threshold,
+bacaan, alert di IndexedDB) **diabaikan** — R07A dan R07B mulai dari
+threshold default dan histori kosong; perangkat lama harus memublikasikan
+ulang dengan `room_id`/`device_id` baru.
 
 ## Database lokal (IndexedDB) — SRS §7
 
@@ -140,7 +148,7 @@ sebagai object store IndexedDB di browser (`src/lib/db.ts`):
 
 | Tabel §7 | Store | Isi |
 |---|---|---|
-| Rooms | (konfigurasi, `src/config/devices.ts`) | 8 ruangan R01–R08 |
+| Rooms | (konfigurasi, `src/config/devices.ts`) | 9 ruangan R01–R06, R07A, R07B, R08 |
 | Devices | `devices` | device_id, room_id, enabled |
 | Sensor Readings | `readings` | device_id, room_id, timestamp, humidity, temperature, pressure, data_status |
 | Thresholds | `thresholds` | room_id, parameter, min, max, unit |
@@ -174,7 +182,8 @@ yang wajib dikonfirmasi/disesuaikan Administrator sebelum dipakai operasional:
 | R04 | 50–85 | 18–30 | – |
 | R05 | 40–80 | 20–38 | – |
 | R06 | 40–65 | 18–26 | **2.5–15** |
-| R07 | 40–65 | 4–26 | – |
+| R07A | 40–65 | 4–26 | – |
+| R07B | 40–65 | 4–26 | – |
 | R08 | 40–70 | 18–30 | – |
 
 ## Peran (UI lokal — tanpa autentikasi)
@@ -195,7 +204,7 @@ adalah lingkup backend produksi.
 ```
 src/
   config.ts            Konstanta waktu (sampling, timeout, freshness), tipe
-  config/devices.ts    8 ruangan MVP + 9 node + ruangan non-MVP + threshold default
+  config/devices.ts    9 ruangan MVP + 9 node + ruangan non-MVP + threshold default
   lib/validate.ts      Validasi payload IIoT, freshness, dedup/out-of-order
   lib/db.ts            IndexedDB (backend bisa ditukar; fallback in-memory)
   lib/csv.ts           Builder ekspor CSV histori
@@ -206,7 +215,7 @@ src/
   components/
     HouseScene.tsx     Scene R3F + drei (dollhouse 12×10 m, beacon node, warna status)
     StatusBar.tsx      Mode / broker / ruangan / alert aktif / peran
-    RoomCards.tsx      8 kartu ruangan + strip alur produksi R01→…→R08
+    RoomCards.tsx      9 kartu ruangan + strip alur produksi R01→…→R08
     TelemetryPanel.tsx Nilai ruangan terpilih + grafik Recharts + daftar node
     HistoryPanel.tsx   Riwayat (IndexedDB) + grafik + tabel + ekspor CSV
     DevicePanel.tsx    Tabel 9 node + toggle aktif/nonaktif

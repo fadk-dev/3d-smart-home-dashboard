@@ -78,7 +78,7 @@ export default function StatusBar(props: { sceneStatus: string }) {
         <span className="brand-mark">🏭</span>
         <div>
           <strong>IIoT Catering — Monitoring Rumah Produksi</strong>
-          <span className="brand-sub">Denah 12 × 10 m • 8 ruangan MVP • 9 node sensor • ΔP R06↔R05</span>
+          <span className="brand-sub">Denah 12 × 10 m • 9 ruangan MVP • 9 node sensor • ΔP R06↔R05</span>
         </div>
       </div>
       <div className="badges" role="status" aria-label="Status sistem">

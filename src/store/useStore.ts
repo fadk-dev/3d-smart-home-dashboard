@@ -61,7 +61,7 @@ export interface DeviceRuntime {
   status: 'ONLINE' | 'OFFLINE';
   lastSeen: number | null;
   lastTs?: number;
-  /** Bacaan valid terakhir perangkat ini (untuk ruangan 2 node seperti R07). */
+  /** Bacaan valid terakhir perangkat ini. */
   lastReading: TelemetryPayload | null;
   lastInvalidAt: number | null;
   invalidCount: number;
@@ -619,6 +619,7 @@ export const useIiotStore = create<IiotState>()((set, get) => ({
         if (dev) devices[d.deviceId] = { ...dev, enabled: d.enabled };
       }
       const alerts: Alert[] = alertRecords
+        .filter((r) => ROOMS.some((room) => room.id === r.roomId))
         .map((r) => ({
           ...r,
           roomId: r.roomId as RoomId,
@@ -636,6 +637,8 @@ export const useIiotStore = create<IiotState>()((set, get) => ({
       const seenByDevice = new Map<string, number>();
       for (const r of readings) {
         const roomId = r.roomId as RoomId;
+        // Abaikan bacaan ruangan lama (mis. R07 sebelum dipecah jadi R07A/R07B).
+        if (!rooms[roomId]) continue;
         const arr = byRoom.get(roomId) ?? [];
         arr.push({ t: r.ts, humidity: r.humidity, temperature: r.temperature, pressure: r.pressure });
         byRoom.set(roomId, arr);

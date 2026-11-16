@@ -1,4 +1,4 @@
-// Kartu 8 ruangan MVP (FR-04) + strip alur produksi (SRS §3.2).
+// Kartu 9 ruangan MVP (FR-04) + strip alur produksi (SRS §3.2).
 // Klik kartu (atau ruangan di 3D) memilih ruangan untuk panel telemetri.
 import { useEffect, useState } from 'react';
 import { FLOW, ROOMS, nodesForRoom } from '../config/devices';
@@ -26,7 +26,7 @@ export function FlowStrip(props: { compact?: boolean }) {
         </span>
       ))}
       {!props.compact && (
-        <span className="flow-note">R01 → R02 → R03 → R04 → R05 → R06 → R07 → R08 (SRS §3.2)</span>
+        <span className="flow-note">R01 → R02 → R03 → R04 → R05 → R06 → R07A → R07B → R08 (SRS §3.2)</span>
       )}
     </nav>
   );

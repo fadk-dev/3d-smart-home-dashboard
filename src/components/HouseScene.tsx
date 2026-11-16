@@ -604,7 +604,7 @@ export default function HouseScene(props: { onReady: () => void }) {
           {/* R01 penerimaan */}
           <Pallet px={9.1} pz={1.6} />
           <Pallet px={10.0} pz={1.0} crates={false} />
-          {/* R07 barat */}
+          {/* R07A barat */}
           <Rack px={0.7} pz={3.3} rotateY={Math.PI / 2} />
           <Rack px={0.7} pz={4.6} rotateY={Math.PI / 2} />
           <Rack px={1.8} pz={3.3} />
@@ -616,7 +616,7 @@ export default function HouseScene(props: { onReady: () => void }) {
           <Stove px={6.9} pz={3.1} />
           <Box position={[toX(8.9), 0.45, toZ(3.1)]} size={[0.9, 0.9, 0.8]} color="#cfd4d6" />
           <PackTable px={7.2} pz={4.7} />
-          {/* R07 selatan */}
+          {/* R07B selatan */}
           <Rack px={4.7} pz={6.3} />
           <Rack px={5.9} pz={6.3} />
           {/* R08 pengiriman */}
@@ -633,10 +633,10 @@ export default function HouseScene(props: { onReady: () => void }) {
           <SinkCounter px={10.3} pz={4.7} />
           <Desk px={10.5} pz={9.2} />
 
-          {/* Beacon node sensor (9 node) */}
+          {/* Beacon node sensor (9 node, satu per ruangan) */}
           {NODES.map((n) => {
             const room = ROOMS.find((r) => r.id === n.roomId) ?? ROOMS[0];
-            const rect = room.rects[n.deviceId.endsWith('-002') ? 1 : 0] ?? room.rects[0];
+            const rect = room.rects[0];
             return (
               <SensorBeacon
                 key={n.deviceId}
