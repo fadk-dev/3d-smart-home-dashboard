@@ -17,11 +17,12 @@ sesuai SRS v1.1 (`SRS — Sistem Monitoring IIoT Rumah Produksi Makanan
   Rentang skala bisa diubah dan ada tombol Reset; ruangan offline tetap merah
   berdenyut dan ruangan tanpa data tetap abu-abu di semua mode.
 - **Layout Dashboard 3D**: scene 3D adalah dasar halaman (full-bleed); semua
-  widget tampil sebagai overlay di atasnya — alur produksi (atas), Filter
-  Visualisasi 3D (kiri, bisa dilipat), telemetri + event log + pengaturan
-  tampilan (kanan), kartu ruangan (strip horizontal bawah). Panel Filter
-  Visualisasi bisa disembunyikan agar scene lebih lega. Di layar kecil
-  (≤900px) overlay kembali menjadi tumpukan normal di bawah canvas. Tab lain
+  widget tampil sebagai overlay di atasnya — alur produksi (atas), kolom
+  pengaturan tampilan 3D di kiri (Filter Visualisasi 3D + Pengaturan tampilan:
+  auto-rotate, bayangan, tampilkan label, tinggi tembok 0,6–3,0 m, opasitas
+  tembok, kualitas — keduanya bisa dilipat), telemetri + event log di kanan,
+  kartu ruangan (strip horizontal bawah). Di layar kecil (≤900px) overlay
+  kembali menjadi tumpukan normal di bawah canvas. Tab lain
   (Riwayat/Perangkat/Threshold/Alert) tetap memakai layout normal.
 - **Penanda pada grafik**: grafik histori ruangan terpilih selalu menandai nilai
   terakhir parameter yang aktif dengan titik + label nilai (suhu = merah,

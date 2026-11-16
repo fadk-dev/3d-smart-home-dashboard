@@ -78,12 +78,14 @@ body { margin: 0; }
 .overlay { position: absolute; z-index: 5; }
 .overlay-flow { top: 12px; left: 12px; right: 436px; }
 .overlay-flow .flow-strip { flex-wrap: nowrap; overflow-x: auto; background: rgba(255,255,255,0.93); }
-.overlay-viz { top: 66px; left: 12px; width: 330px; max-height: calc(100% - 242px); overflow-y: auto; }
+.overlay-view {
+  top: 66px; left: 12px; bottom: 176px; width: 330px;
+  display: flex; flex-direction: column; gap: 12px; overflow-y: auto; padding-right: 2px;
+}
 .overlay-side {
   top: 12px; right: 12px; bottom: 176px; width: 400px;
   overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 2px;
 }
-.overlay-side .scene-settings { position: static; flex-wrap: wrap; }
 .overlay-rooms { left: 12px; right: 12px; bottom: 12px; height: 152px; }
 .overlay-rooms section { height: 100%; }
 .overlay-rooms .room-cards { display: flex; overflow-x: auto; height: 100%; padding-bottom: 4px; }
@@ -99,12 +101,13 @@ body { margin: 0; }
   max-width: 70%;
 }
 .scene-settings {
-  position: absolute; right: 12px; bottom: 12px; z-index: 5;
   background: rgba(255,255,255,0.94); border: 1px solid var(--border);
-  border-radius: 8px; padding: 8px 12px; font-size: 12px;
-  display: flex; gap: 14px; align-items: center;
+  border-radius: 12px; padding: 10px 12px; font-size: 12px;
+  display: flex; flex-direction: column; gap: 8px;
 }
-.scene-settings legend { font-size: 11px; color: var(--muted); padding: 0 4px; }
+.scene-settings-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.scene-settings-head h2 { margin: 0; font-size: 13px; }
+.scene-settings-body { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
 .scene-settings label { display: flex; gap: 5px; align-items: center; cursor: pointer; }
 .scene-settings select { margin-left: 5px; }
 .scene-settings input[type='range'] { width: 90px; accent-color: var(--accent, #b45309); }
@@ -334,7 +337,7 @@ body { margin: 0; }
   .overlay { position: static; width: auto; max-height: none; overflow: visible; }
   .overlay-flow { right: auto; }
   .overlay-flow .flow-strip { flex-wrap: wrap; overflow-x: visible; }
-  .overlay-viz { top: auto; }
+  .overlay-view { top: auto; bottom: auto; }
   .overlay-side { bottom: auto; }
   .overlay-rooms { height: auto; }
   .overlay-rooms .room-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); overflow: visible; height: auto; }
