@@ -147,6 +147,14 @@ export default function App() {
                       Tampilkan label
                     </label>
                     <label>
+                      <input
+                        type="checkbox"
+                        checked={scene.showFurniture}
+                        onChange={(e) => setScene({ showFurniture: e.target.checked })}
+                      />
+                      Tampilkan perabot
+                    </label>
+                    <label>
                       Tinggi tembok
                       <input
                         type="range"

@@ -24,6 +24,10 @@ sesuai SRS v1.1 (`SRS — Sistem Monitoring IIoT Rumah Produksi Makanan
   kartu ruangan (strip horizontal bawah). Di layar kecil (≤900px) overlay
   kembali menjadi tumpukan normal di bawah canvas. Tab lain
   (Riwayat/Perangkat/Threshold/Alert) tetap memakai layout normal.
+- **Toggle perabot**: panel "Pengaturan tampilan" punya checkbox "Tampilkan
+  perabot" — mematikan rak, meja, kompor, chiller, palet, loker, dll agar
+  lantai dan warna visualisasi terlihat bersih; **beacon sensor tidak ikut
+  disembunyikan** dan tetap tampil di tiap ruangan.
 - **Penanda pada grafik**: grafik histori ruangan terpilih selalu menandai nilai
   terakhir parameter yang aktif dengan titik + label nilai (suhu = merah,
   kelembapan = biru, ΔP = cokelat), plus garis putus-putus min/maks threshold.

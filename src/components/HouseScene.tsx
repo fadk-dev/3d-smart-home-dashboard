@@ -482,6 +482,7 @@ export default function HouseScene(props: { onReady: () => void }) {
   const wallHeight = useIiotStore((s) => s.scene.wallHeight);
   const wallOpacity = useIiotStore((s) => s.scene.wallOpacity);
   const showLabels = useIiotStore((s) => s.scene.showLabels);
+  const showFurniture = useIiotStore((s) => s.scene.showFurniture);
   const vizMode = useIiotStore((s) => s.scene.vizMode);
   const tempMin = useIiotStore((s) => s.scene.tempMin);
   const tempMax = useIiotStore((s) => s.scene.tempMax);
@@ -590,48 +591,54 @@ export default function HouseScene(props: { onReady: () => void }) {
             <WallSegment key={i} x1={x1} z1={z1} x2={x2} z2={z2} height={wallHeight} opacity={wallOpacity} />
           ))}
 
-          {/* Peralatan — R04 pencucian */}
-          <SinkCounter px={0.7} pz={0.5} />
-          <SinkCounter px={1.8} pz={0.5} />
-          <SinkCounter px={2.4} pz={1.8} />
-          {/* R02 gudang kering */}
-          <Rack px={3.7} pz={0.6} />
-          <Rack px={4.9} pz={0.6} />
-          <Rack px={3.7} pz={1.9} />
-          {/* R03 chiller/freezer */}
-          <ChillerBox px={6.4} pz={1.2} />
-          <ChillerBox px={7.9} pz={1.2} />
-          {/* R01 penerimaan */}
-          <Pallet px={9.1} pz={1.6} />
-          <Pallet px={10.0} pz={1.0} crates={false} />
-          {/* R07A barat */}
-          <Rack px={0.7} pz={3.3} rotateY={Math.PI / 2} />
-          <Rack px={0.7} pz={4.6} rotateY={Math.PI / 2} />
-          <Rack px={1.8} pz={3.3} />
-          {/* R06 pengemasan */}
-          <PackTable px={3.3} pz={3.6} />
-          <PackTable px={4.7} pz={3.6} />
-          <PackTable px={4.0} pz={4.7} />
-          {/* R05 dapur */}
-          <Stove px={6.9} pz={3.1} />
-          <Box position={[toX(8.9), 0.45, toZ(3.1)]} size={[0.9, 0.9, 0.8]} color="#cfd4d6" />
-          <PackTable px={7.2} pz={4.7} />
-          {/* R07B selatan */}
-          <Rack px={4.7} pz={6.3} />
-          <Rack px={5.9} pz={6.3} />
-          {/* R08 pengiriman */}
-          <Pallet px={0.8} pz={6.4} />
-          <Pallet px={1.6} pz={7.5} />
-          <Pallet px={0.8} pz={7.9} crates={false} />
-          {/* Non-MVP: loker, toilet, sampah, janitor, pencucian alat, kantor */}
-          <Locker px={7.5} pz={6.0} />
-          <Locker px={8.4} pz={6.0} />
-          <Box position={[toX(9.7), 0.35, toZ(7.9)]} size={[0.5, 0.7, 0.6]} color="#f5f5f2" />
-          <Bin px={11.2} pz={6.2} />
-          <Bin px={11.2} pz={7.0} color="#6b7280" />
-          <Rack px={11.3} pz={3.0} />
-          <SinkCounter px={10.3} pz={4.7} />
-          <Desk px={10.5} pz={9.2} />
+          {/* Peralatan/perabot ruangan — bisa disembunyikan lewat toggle;
+              beacon sensor TIDAK termasuk perabot dan selalu tampil. */}
+          {showFurniture && (
+            <>
+              {/* Peralatan — R04 pencucian */}
+              <SinkCounter px={0.7} pz={0.5} />
+              <SinkCounter px={1.8} pz={0.5} />
+              <SinkCounter px={2.4} pz={1.8} />
+              {/* R02 gudang kering */}
+              <Rack px={3.7} pz={0.6} />
+              <Rack px={4.9} pz={0.6} />
+              <Rack px={3.7} pz={1.9} />
+              {/* R03 chiller/freezer */}
+              <ChillerBox px={6.4} pz={1.2} />
+              <ChillerBox px={7.9} pz={1.2} />
+              {/* R01 penerimaan */}
+              <Pallet px={9.1} pz={1.6} />
+              <Pallet px={10.0} pz={1.0} crates={false} />
+              {/* R07A barat */}
+              <Rack px={0.7} pz={3.3} rotateY={Math.PI / 2} />
+              <Rack px={0.7} pz={4.6} rotateY={Math.PI / 2} />
+              <Rack px={1.8} pz={3.3} />
+              {/* R06 pengemasan */}
+              <PackTable px={3.3} pz={3.6} />
+              <PackTable px={4.7} pz={3.6} />
+              <PackTable px={4.0} pz={4.7} />
+              {/* R05 dapur */}
+              <Stove px={6.9} pz={3.1} />
+              <Box position={[toX(8.9), 0.45, toZ(3.1)]} size={[0.9, 0.9, 0.8]} color="#cfd4d6" />
+              <PackTable px={7.2} pz={4.7} />
+              {/* R07B selatan */}
+              <Rack px={4.7} pz={6.3} />
+              <Rack px={5.9} pz={6.3} />
+              {/* R08 pengiriman */}
+              <Pallet px={0.8} pz={6.4} />
+              <Pallet px={1.6} pz={7.5} />
+              <Pallet px={0.8} pz={7.9} crates={false} />
+              {/* Non-MVP: loker, toilet, sampah, janitor, pencucian alat, kantor */}
+              <Locker px={7.5} pz={6.0} />
+              <Locker px={8.4} pz={6.0} />
+              <Box position={[toX(9.7), 0.35, toZ(7.9)]} size={[0.5, 0.7, 0.6]} color="#f5f5f2" />
+              <Bin px={11.2} pz={6.2} />
+              <Bin px={11.2} pz={7.0} color="#6b7280" />
+              <Rack px={11.3} pz={3.0} />
+              <SinkCounter px={10.3} pz={4.7} />
+              <Desk px={10.5} pz={9.2} />
+            </>
+          )}
 
           {/* Beacon node sensor (9 node, satu per ruangan) */}
           {NODES.map((n) => {

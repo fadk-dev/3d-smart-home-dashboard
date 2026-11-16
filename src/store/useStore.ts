@@ -110,6 +110,8 @@ export interface SceneSettings {
   wallOpacity: number;
   /** Tampilkan/sembunyikan semua label marker (nama ruangan, ID node, penanda utara). */
   showLabels: boolean;
+  /** Tampilkan/sembunyikan perabot ruangan (rak, meja, kompor, dll) — beacon sensor tetap tampil. */
+  showFurniture: boolean;
   /** Mode pewarnaan lantai ruangan di scene 3D. */
   vizMode: VizMode;
   /** Rentang skala warna suhu (°C) — nilai di luar rentang dijepit ke ujung. */
@@ -249,6 +251,7 @@ export const useIiotStore = create<IiotState>()((set, get) => ({
     wallHeight: 1.2,
     wallOpacity: 0.45,
     showLabels: true,
+    showFurniture: true,
     vizMode: 'status',
     tempMin: DEFAULT_TEMP_SCALE.min,
     tempMax: DEFAULT_TEMP_SCALE.max,
