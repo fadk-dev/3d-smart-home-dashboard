@@ -16,6 +16,18 @@ sesuai SRS v1.1 (`SRS — Sistem Monitoring IIoT Rumah Produksi Makanan
   0..100 %RH), atau Keduanya (separuh lantai suhu + separuh kelembapan).
   Rentang skala bisa diubah dan ada tombol Reset; ruangan offline tetap merah
   berdenyut dan ruangan tanpa data tetap abu-abu di semua mode.
+- **Layout Dashboard 3D**: scene 3D adalah dasar halaman (full-bleed); semua
+  widget tampil sebagai overlay di atasnya — alur produksi (atas), Filter
+  Visualisasi 3D (kiri, bisa dilipat), telemetri + event log + pengaturan
+  tampilan (kanan), kartu ruangan (strip horizontal bawah). Panel Filter
+  Visualisasi bisa disembunyikan agar scene lebih lega. Di layar kecil
+  (≤900px) overlay kembali menjadi tumpukan normal di bawah canvas. Tab lain
+  (Riwayat/Perangkat/Threshold/Alert) tetap memakai layout normal.
+- **Penanda pada grafik**: grafik histori ruangan terpilih selalu menandai nilai
+  terakhir parameter yang aktif dengan titik + label nilai (suhu = merah,
+  kelembapan = biru, ΔP = cokelat), plus garis putus-putus min/maks threshold.
+  Parameter grafik mengikuti mode visualisasi saat ruangan dipilih (mode Suhu
+  → grafik suhu, mode Kelembapan → grafik kelembapan).
 - **8 ruangan MVP** (AC-13) dengan **9 node sensor** independen: R01 Penerimaan
   Bahan Baku, R02 Gudang Bahan Kering, R03 Chiller/Freezer, R04 Cuci dan Sortir
   Bahan, R05 Dapur Produksi/Memasak, R06 Porsi dan Pengemasan (satu-satunya

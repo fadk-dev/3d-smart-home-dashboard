@@ -96,90 +96,96 @@ export default function App() {
       </nav>
       <main className="main">
         {tab === 'dashboard' && (
-          <>
-            <FlowStrip />
-            <div className="layout">
-              <div className="canvas-wrap">
-                <HouseScene onReady={() => setSceneStatus('READY')} />
-                <div className="canvas-hint">
-                  Seret untuk rotate • Klik kanan seret untuk pan • Scroll untuk zoom • Klik
-                  ruangan atau beacon sensor untuk memilih
-                </div>
-                <fieldset className="scene-settings">
-                  <legend>Pengaturan tampilan (lokal — tidak mengubah perangkat)</legend>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={scene.autoRotate}
-                      onChange={(e) => setScene({ autoRotate: e.target.checked })}
-                    />
-                    Auto-rotate
-                  </label>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={scene.shadows}
-                      onChange={(e) => setScene({ shadows: e.target.checked })}
-                    />
-                    Bayangan
-                  </label>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={scene.showLabels}
-                      onChange={(e) => setScene({ showLabels: e.target.checked })}
-                    />
-                    Tampilkan label
-                  </label>
-                  <label>
-                    Tinggi tembok
-                    <input
-                      type="range"
-                      min={0.6}
-                      max={3.0}
-                      step={0.1}
-                      value={scene.wallHeight}
-                      onChange={(e) => setScene({ wallHeight: Number(e.target.value) })}
-                      aria-label="Tinggi tembok (meter)"
-                    />
-                    <span className="slider-val">{scene.wallHeight.toFixed(1)} m</span>
-                  </label>
-                  <label>
-                    Opasitas tembok
-                    <input
-                      type="range"
-                      min={0.1}
-                      max={1}
-                      step={0.05}
-                      value={scene.wallOpacity}
-                      onChange={(e) => setScene({ wallOpacity: Number(e.target.value) })}
-                      aria-label="Opasitas tembok"
-                    />
-                    <span className="slider-val">{Math.round(scene.wallOpacity * 100)}%</span>
-                  </label>
-                  <label>
-                    Kualitas
-                    <select
-                      value={scene.quality}
-                      onChange={(e) =>
-                        setScene({ quality: e.target.value === 'low' ? 'low' : 'high' })
-                      }
-                      aria-label="Kualitas render"
-                    >
-                      <option value="high">Tinggi</option>
-                      <option value="low">Rendah</option>
-                    </select>
-                  </label>
-                </fieldset>
-              </div>
-              <aside className="sidebar">
-                <TelemetryPanel />
-                <EventLog />
-              </aside>
+          <div className="dashboard-3d">
+            {/* 3D adalah dasar halaman; semua widget tampil sebagai overlay di atasnya.
+                Tab lain (Riwayat/Perangkat/Threshold/Alert) tetap memakai layout normal. */}
+            <div className="canvas-base">
+              <HouseScene onReady={() => setSceneStatus('READY')} />
             </div>
-            <VizFilterPanel />
-            <RoomCards />
-          </>
+            <div className="overlay overlay-flow">
+              <FlowStrip compact />
+            </div>
+            <div className="overlay overlay-viz">
+              <VizFilterPanel />
+            </div>
+            <aside className="overlay overlay-side" aria-label="Panel informasi">
+              <TelemetryPanel />
+              <EventLog />
+              <fieldset className="scene-settings">
+                <legend>Pengaturan tampilan (lokal — tidak mengubah perangkat)</legend>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={scene.autoRotate}
+                    onChange={(e) => setScene({ autoRotate: e.target.checked })}
+                  />
+                  Auto-rotate
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={scene.shadows}
+                    onChange={(e) => setScene({ shadows: e.target.checked })}
+                  />
+                  Bayangan
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={scene.showLabels}
+                    onChange={(e) => setScene({ showLabels: e.target.checked })}
+                  />
+                  Tampilkan label
+                </label>
+                <label>
+                  Tinggi tembok
+                  <input
+                    type="range"
+                    min={0.6}
+                    max={3.0}
+                    step={0.1}
+                    value={scene.wallHeight}
+                    onChange={(e) => setScene({ wallHeight: Number(e.target.value) })}
+                    aria-label="Tinggi tembok (meter)"
+                  />
+                  <span className="slider-val">{scene.wallHeight.toFixed(1)} m</span>
+                </label>
+                <label>
+                  Opasitas tembok
+                  <input
+                    type="range"
+                    min={0.1}
+                    max={1}
+                    step={0.05}
+                    value={scene.wallOpacity}
+                    onChange={(e) => setScene({ wallOpacity: Number(e.target.value) })}
+                    aria-label="Opasitas tembok"
+                  />
+                  <span className="slider-val">{Math.round(scene.wallOpacity * 100)}%</span>
+                </label>
+                <label>
+                  Kualitas
+                  <select
+                    value={scene.quality}
+                    onChange={(e) =>
+                      setScene({ quality: e.target.value === 'low' ? 'low' : 'high' })
+                    }
+                    aria-label="Kualitas render"
+                  >
+                    <option value="high">Tinggi</option>
+                    <option value="low">Rendah</option>
+                  </select>
+                </label>
+              </fieldset>
+            </aside>
+            <div className="overlay overlay-rooms">
+              <RoomCards />
+            </div>
+            <div className="overlay overlay-hint canvas-hint">
+              Seret untuk rotate • Klik kanan seret untuk pan • Scroll untuk zoom • Klik
+              ruangan atau beacon sensor untuk memilih
+            </div>
+          </div>
         )}
         {tab === 'riwayat' && <HistoryPanel />}
         {tab === 'perangkat' && (

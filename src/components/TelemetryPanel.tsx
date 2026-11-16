@@ -7,6 +7,8 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceDot,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -32,12 +34,21 @@ export default function TelemetryPanel() {
   const room = useIiotStore((s) => s.rooms[s.selectedRoomId]);
   const devices = useIiotStore((s) => s.devices);
   const thresholds = useIiotStore((s) => s.thresholds[s.selectedRoomId]);
+  const vizMode = useIiotStore((s) => s.scene.vizMode);
   const [param, setParam] = useState<Parameter>('temperature');
   const [, setNow] = useState(Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  // Saat ruangan dipilih (atau mode visualisasi berubah), parameter grafik
+  // mengikuti parameter yang divisualisasikan — jadi penanda suhu/kelembapan
+  // selalu tampil pada grafik ruangan terpilih.
+  useEffect(() => {
+    if (vizMode === 'temperature') setParam('temperature');
+    else if (vizMode === 'humidity') setParam('humidity');
+  }, [selectedRoomId, vizMode]);
 
   const cfg = roomById(selectedRoomId);
   const latest = room.latest;
@@ -66,6 +77,12 @@ export default function TelemetryPanel() {
   }));
   const meta = PARAMETER_META[shownParam];
   const range = thresholds[shownParam];
+  // Titik terakhir yang punya nilai — penanda nilai terbaru pada grafik.
+  const lastPoint = [...chartData]
+    .reverse()
+    .find((p): p is { waktu: string; nilai: number } => p.nilai !== null && p.nilai !== undefined);
+  const markerColor =
+    shownParam === 'temperature' ? '#dc2626' : shownParam === 'humidity' ? '#2563eb' : '#b45309';
 
   return (
     <section className="panel" aria-label="Telemetri ruangan terpilih">
@@ -161,6 +178,39 @@ export default function TelemetryPanel() {
                 isAnimationActive={false}
                 connectNulls
               />
+              {range && (
+                <>
+                  <ReferenceLine
+                    y={range.min}
+                    stroke="#f59e0b"
+                    strokeDasharray="4 4"
+                    label={{ value: `min ${range.min}`, fontSize: 10, fill: '#92400e', position: 'insideBottomLeft' }}
+                  />
+                  <ReferenceLine
+                    y={range.max}
+                    stroke="#f59e0b"
+                    strokeDasharray="4 4"
+                    label={{ value: `maks ${range.max}`, fontSize: 10, fill: '#92400e', position: 'insideTopLeft' }}
+                  />
+                </>
+              )}
+              {lastPoint && (
+                <ReferenceDot
+                  x={lastPoint.waktu}
+                  y={lastPoint.nilai}
+                  r={5}
+                  fill={markerColor}
+                  stroke="#fff"
+                  strokeWidth={2}
+                  label={{
+                    value: `${fmtVal(lastPoint.nilai)} ${meta.unit}`,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    fill: markerColor,
+                    position: 'top',
+                  }}
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -169,7 +219,9 @@ export default function TelemetryPanel() {
       )}
       <p className="hint">
         Histori: {room.history.length}/{240} titik di memori • threshold:{' '}
-        {range ? `${range.min}–${range.max} ${range.unit}` : '--'}
+        {range ? `${range.min}–${range.max} ${range.unit}` : '--'} • Penanda{' '}
+        <span style={{ color: markerColor, fontWeight: 700 }}>●</span> = nilai terakhir{' '}
+        {meta.label} ruangan terpilih.
       </p>
 
       <h3 className="subhead">Node sensor ruangan ini</h3>

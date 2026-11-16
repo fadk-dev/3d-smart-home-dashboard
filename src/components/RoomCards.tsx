@@ -15,7 +15,7 @@ function fmtTime(ts: number | null): string {
   return new Date(ts).toLocaleTimeString('id-ID', { hour12: false });
 }
 
-export function FlowStrip() {
+export function FlowStrip(props: { compact?: boolean }) {
   return (
     <nav className="flow-strip" aria-label="Alur produksi">
       <span className="flow-title">Alur produksi:</span>
@@ -25,7 +25,9 @@ export function FlowStrip() {
           <span className="flow-chip">{id}</span>
         </span>
       ))}
-      <span className="flow-note">R01 → R02 → R03 → R04 → R05 → R06 → R07 → R08 (SRS §3.2)</span>
+      {!props.compact && (
+        <span className="flow-note">R01 → R02 → R03 → R04 → R05 → R06 → R07 → R08 (SRS §3.2)</span>
+      )}
     </nav>
   );
 }

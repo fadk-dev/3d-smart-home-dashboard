@@ -5,6 +5,7 @@
 // (separuh lantai suhu + separuh kelembapan). Rentang skala warna bisa
 // diatur; nilai di luar rentang dijepit ke ujung skala. Ruangan offline
 // tetap merah berdenyut dan ruangan tanpa data tetap abu-abu di semua mode.
+import { useState } from 'react';
 import { gradientCss, HUM_STOPS, TEMP_STOPS } from '../lib/colorScale';
 import type { VizMode } from '../lib/colorScale';
 import { useIiotStore } from '../store/useStore';
@@ -73,6 +74,7 @@ function LegendBar(props: { title: string; gradient: string; minLabel: string; m
 export default function VizFilterPanel() {
   const scene = useIiotStore((s) => s.scene);
   const setScene = useIiotStore((s) => s.setScene);
+  const [open, setOpen] = useState(true);
   const reset = () =>
     setScene({
       vizMode: 'status',
@@ -86,10 +88,22 @@ export default function VizFilterPanel() {
     <section className="viz-panel" aria-label="Filter visualisasi 3D">
       <div className="viz-panel-head">
         <h2>Filter Visualisasi 3D</h2>
-        <button type="button" className="btn-ghost" onClick={reset}>
-          Reset
-        </button>
+        <span className="viz-head-actions">
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+          >
+            {open ? 'Sembunyikan' : 'Tampilkan'}
+          </button>
+          <button type="button" className="btn-ghost" onClick={reset}>
+            Reset
+          </button>
+        </span>
       </div>
+      {open && (
+        <>
       <p className="viz-note">
         Warnai lantai tiap ruangan menurut nilai sensor terakhir. Bisa tampil sendiri-sendiri
         (suhu saja / kelembapan saja) atau bersama-sama (keduanya).
@@ -166,6 +180,8 @@ export default function VizFilterPanel() {
         Mode &apos;Keduanya&apos;: sisi barat lantai = suhu, sisi timur = kelembapan. Ruangan
         offline tetap merah berdenyut; ruangan tanpa data tetap abu-abu.
       </p>
+        </>
+      )}
     </section>
   );
 }
